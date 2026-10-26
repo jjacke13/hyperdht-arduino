@@ -72,3 +72,37 @@ No flash/runtime/phone test of this Arduino example, reconnect/soak or peak
 internal/PSRAM measurements. Earlier Ghost Node operator successes do not prove
 this new Arduino integration. Arduino IDE/Library Manager and Axiometa Studio
 packaging are outside this first ESP-IDF-component build.
+
+## Separate N16R8 profile — 2026-10-26
+
+Operator flashed the N4R2-profile image onto another ESP32-S3 identified as
+N16R8 and reported repeated software resets shortly after bootloader entry.
+The excerpt supplies no exception/panic cause. The existing quad-PSRAM profile
+is a confirmed mismatch for Espressif's standard WROOM-1 N16R8, whose 8 MB
+PSRAM is octal. This is a likely explanation, not a proven fault diagnosis.
+
+Added `scripts/build.sh n16r8`, `sdkconfig.defaults.n16r8`, separate ignored
+`sdkconfig.n16r8` and `build-n16r8/`. Only Wi-Fi settings are copied locally on
+first use; configuration mode remains 0600. N4R2 keeps its original config
+and build directory. The 3 MiB app partition and NVS offsets are unchanged.
+
+Actual generated config verified: flash16MB, PSRAM_MODE_OCT,80MHz, loop32768B.
+Nix full link, partition check, required server/Arduino/SecretStream symbols and
+TLS0 pass. Image **1,160,768 bytes**, app partition free **1,984,960 bytes**;
+SHA256 `a3f7de40fd57db9b7227ea4d20c621ff939dc6180e1798f913e402ecf3cbc844`.
+This locally configured firmware must not be published or shared as a generic
+binary. The previous prototype measurements above remain their own snapshot.
+
+A real IDF reconfigure test with a copied N16R8 sdkconfig and selected N4R2
+board fails with the expected memory-profile mismatch. Shell syntax check
+passes.
+The default N4R2 build was then rerun successfully with its original quad
+configuration, required symbols and TLS0, confirming the two build paths.
+
+No runtime library or sketch code changed. Octal-PSRAM hardware boot
+and networking remain unverified; earlier quad-PSRAM QEMU startup is not N16R8
+runtime evidence. No device was reset/flashed by the agent.
+
+Source review also confirms Ghost Node reads its persisted `ghost-node/seed`
+and generates only when missing. Its public key survives normal power cycles.
+This Arduino example independently persists `p2p-arduino/seed`.

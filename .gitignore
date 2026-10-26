@@ -1,8 +1,11 @@
 build/
 build-tests/
 build-tests-config/
+build-n16r8/
 managed_components/
 sdkconfig
 sdkconfig.old
 sdkconfig.local
 sdkconfig.before-selective
+sdkconfig.n16r8
+sdkconfig.n16r8.old

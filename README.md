@@ -39,7 +39,8 @@ Arduino IDE/Library Manager ZIP: copying this directory into Arduino libraries
 does not install or configure the native dependencies.
 
 Pinned integration: ESP-IDF 5.5.2, Arduino-ESP32 3.3.6, libsodium 1.0.21;
-ESP32-S3 N4R2, 4 MB flash, 2 MB quad PSRAM, 3 MiB factory partition, no OTA.
+ESP32-S3 N4R2 (4 MB flash / 2 MB quad PSRAM) or standard WROOM-1 N16R8
+(16 MB flash / 8 MB octal PSRAM), 3 MiB factory partition, no OTA.
 The sketch has no display dependency and does not use any board-specific GPIO.
 Other ESP32 variants have not been validated.
 
@@ -67,6 +68,37 @@ f57d423b2d65a660468cbb8029536ec99b9e79c2. No owner checkout needs modification.
 The TLS patch removes an embedded per-task RNG allocation that previously
 overflowed the idle-task stack. It is required until an accepted upstream
 replacement is pinned and tested.
+
+### N16R8 memory profile
+
+The N4R2 quad-PSRAM image is not a universal ESP32-S3 image. Espressif's
+[WROOM-1 datasheet](https://documentation.espressif.com/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf)
+specifies octal PSRAM for N16R8. Select its profile explicitly:
+
+```sh
+# Inside the same Nix shell, from the repository root:
+bash scripts/build.sh n16r8
+cd examples/PublicWebServer
+idf.py -B build-n16r8 menuconfig
+```
+
+The N16R8 build uses `build-n16r8/` and ignored `sdkconfig.n16r8`, independently
+of the N4R2 `build/` and `sdkconfig`. On first use only the Wi-Fi settings are
+copied from the existing configuration, locally without printing them. Edit
+P2P example in menuconfig if needed, then rerun `bash scripts/build.sh n16r8`
+from the repository root. CMake rejects a board/config memory-mode mismatch.
+
+Before flashing, close any monitor and verify the connected device using
+`python -m esptool --chip esp32s3 --port PORT chip_id` and `flash_id`. For a
+confirmed N16R8, flash from the example directory using:
+
+```sh
+idf.py -B build-n16r8 -p PORT flash monitor
+```
+
+No whole-flash erase is required. This example keeps its seed in the
+`p2p-arduino` NVS namespace; Ghost Node uses `ghost-node`. Normal power cycles
+retain an existing seed and public link. Erasing the NVS partition loses it.
 
 ## API and limits
 

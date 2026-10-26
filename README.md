@@ -1,4 +1,21 @@
-# HyperDHT for Arduino on ESP32
+# HyperDHT for ESP32-S3 — Arduino framework
+
+**Hardware target: Espressif ESP32-S3.** Arduino refers to the programming
+framework and IDE used to write and upload the application. This package does
+not provide general Arduino-board support: Uno, Mega and Uno R4 are unsupported.
+The packaged library requires Arduino-ESP32 **3.3.6**.
+
+## Tested hardware
+
+| ESP32-S3 variant | Flash | PSRAM | Arduino PSRAM setting |
+|---|---:|---:|---|
+| **N4R2** | 4 MB | 2 MB quad | QSPI PSRAM |
+| **N16R8** | 16 MB | 8 MB octal | OPI PSRAM |
+
+Hardware testing is reported for these two variants. Other ESP32 chips and
+board configurations have not been validated. See
+[build and validation details](ARDUINO-CLI.md#verified-scope--2026-10-26) for
+the checks performed and remaining limits.
 
 Write ordinary Arduino `setup()`/`loop()` application code while HyperDHT
 handles encrypted P2P connections. The first high-level API is a public-mode

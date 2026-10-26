@@ -30,6 +30,7 @@ package="$stage/HyperDHT_ESP32"
 mkdir -p "$package/src/esp32s3" "$package/src/hyperdht" \
     "$package/examples/PublicWebServer" "$package/extras/sources"
 cp arduino/library.properties LICENSE "$package/"
+cp ARDUINO-CLI.md "$package/extras/"
 cp src/HyperDHTNode.h src/HolesailWebServer.h "$package/src/"
 cp "$HYPERDHT_DIR/include/hyperdht/hyperdht.h" "$package/src/hyperdht/"
 cp build-arduino-native/libhyperdht_native.a "$package/src/esp32s3/"

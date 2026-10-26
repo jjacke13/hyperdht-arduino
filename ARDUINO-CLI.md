@@ -1,4 +1,17 @@
-# Arduino CLI evaluation package
+# ESP32-S3 library for the Arduino framework and IDE
+
+**ESP32-S3 hardware only.** Arduino is the software framework/IDE here;
+this package does not support Uno, Mega or Uno R4 boards.
+
+Tested hardware variants:
+
+| ESP32-S3 variant | Flash | PSRAM |
+|---|---:|---|
+| **N4R2** | 4 MB | 2 MB quad (QSPI) |
+| **N16R8** | 16 MB | 8 MB octal (OPI) |
+
+These are the reported hardware tests, not a compatibility claim for all
+ESP32 boards. The packaged native library requires Arduino-ESP32 **3.3.6**.
 
 The generated `dist/HyperDHT_ESP32-0.1.0.zip` installs as an ordinary Arduino
 library. It exposes `HyperDHTNode` and `HolesailWebServer` and includes the
@@ -53,6 +66,9 @@ On NixOS, use `nix shell nixpkgs#arduino-cli nixpkgs#python3`; the packaged CLI
 provides its compiler runtime environment, while Python is needed by the ESP32
 build recipes. This evaluation used CLI 1.4.1 and core 3.3.6; Axiometa's source
 pins CLI 1.5.1, so that exact CLI version remains an integration check.
+
+For Arduino IDE on NixOS, launch the IDE from an environment providing
+`python3` in PATH. This was needed for the operator's successful IDE workflow.
 
 Compile the installed example (replace `SKETCH` with its actual directory):
 
@@ -112,9 +128,10 @@ Existing host ASan/UBSan wrapper/HTTP checks pass. Both ESP-IDF profiles also
 rebuild and retain zero GCC TLS and required server symbols after the portable
 Wi-Fi configuration and loop-stack declaration changes.
 
-No firmware was flashed. CLI-package startup, phone/laptop interoperability,
-load/reconnect tests and runtime memory peaks remain unverified. Earlier
-component-firmware hardware success does not establish those results for the
-stock SDK package. Exact Axiometa FQBN/CLI 1.5.1, Studio ZIP acceptance and
-catalog/Library Manager integration remain separate checks. Nothing has been
-published, registered or submitted to Axiometa.
+The operator subsequently confirmed the Arduino IDE build/upload workflow
+after adding Python3 to PATH through a temporary Nix shell, and reports tested
+N4R2 and N16R8 hardware. These operator reports supplement the automated build
+checks; they do not establish load/reconnect reliability or runtime memory
+peaks. No agent flashing was performed. Exact Axiometa FQBN/CLI 1.5.1, Studio
+ZIP acceptance and catalog/Library Manager integration remain separate checks.
+Nothing has been published, registered or submitted to Axiometa.

@@ -1,5 +1,12 @@
 # Initial integration checks — 2026-10-26
 
+Current hardware scope: **ESP32-S3 N4R2 and N16R8**, using the Arduino
+framework/IDE. These are ESP32-S3 variants, not general Arduino-board support.
+The operator reports testing both variants and a successful Arduino IDE
+workflow after adding Python3 to PATH. See [ARDUINO-CLI.md](ARDUINO-CLI.md) for
+the later ZIP build checks and current limits; the initial measurements below
+describe their original component-build artifacts.
+
 Scope: a new Arduino-framework library/component and separate static-webpage
 example. Initial integration left Ghost Node and the ping app unchanged.
 The operator subsequently flashed the N16R8; the hardware check below reads

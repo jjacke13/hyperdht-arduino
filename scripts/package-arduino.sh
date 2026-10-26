@@ -57,7 +57,7 @@ tar -czf "$package/extras/sources/libsodium.tar.gz" --exclude=.git -C "$SODIUM_D
     CMakeLists.txt Kconfig LICENSE idf_component.yml libsodium port port_include
 cp embedded-tls.patch "$package/extras/sources/"
 tar -czf "$package/extras/sources/arduino-wrapper.tar.gz" \
-    arduino src scripts/package-arduino.sh scripts/check-tls.py embedded-tls.patch LICENSE
+    arduino src scripts/package-arduino.sh scripts/check-tls.py embedded-tls.patch LICENSE ARDUINO-CLI.md
 printf '%s\n' 'HyperDHT bb16c0b + embedded-tls.patch; UDX 759bf764; Holesail f57d423; libsodium 1.0.21.' \
     'Native archive rebuilt against Arduino-ESP32 3.3.6 stock ESP32-S3 SDK, not ESP-IDF component archives.' \
     'Evaluation only: compile/link checks do not establish hardware startup or client interoperability.' \

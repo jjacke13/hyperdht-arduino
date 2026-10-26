@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 board=${1:-n4r2}
 case "$board" in
     n4r2) build=build; config=sdkconfig ;;
-    n16r8) build=build-n16r8; config=sdkconfig.n16r8 ;;
+    n16r8) build='build-n16r8'; config=sdkconfig.n16r8 ;;
     *) echo 'Usage: scripts/build.sh [n4r2|n16r8]' >&2; exit 2 ;;
 esac
 umask 077
@@ -16,7 +16,10 @@ for dir in "$HYPERDHT_DIR" "$HOLESAIL_DIR"; do
     [[ "$(git -C "$dir" rev-parse --show-toplevel)" == "$(realpath "$dir")" ]] || exit 1
 done
 [[ "$(git -C "$HYPERDHT_DIR" rev-parse HEAD)" == bb16c0b0fab5c4dccfde50120955ea0a1730b903 ]] || exit 1
-[[ "$(git -C "$HOLESAIL_DIR" rev-parse HEAD)" == f57d423b2d65a660468cbb8029536ec99b9e79c2 ]] || exit 1
+case "$(git -C "$HOLESAIL_DIR" rev-parse HEAD)" in
+    8e1efbe4b79dc7d4695eaf2dcfae39bd4cb7769e|f57d423b2d65a660468cbb8029536ec99b9e79c2) ;;
+    *) echo 'Use the pinned Holesail codec revision from README.md' >&2; exit 1 ;;
+esac
 git -C "$HYPERDHT_DIR" apply --reverse --check "$PWD/embedded-tls.patch"
 cd examples/PublicWebServer
 defaults=sdkconfig.defaults

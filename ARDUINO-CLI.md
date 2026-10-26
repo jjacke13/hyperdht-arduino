@@ -28,15 +28,15 @@ Public headers reject a different chip/core version or a unicore SDK.
 
 ## Build the package with Nix
 
-Start from the existing README's pinned private dependency checkouts and
+Start from the existing README's separate pinned dependency clones and
 ESP-IDF component dependency setup, which supplies libsodium 1.0.21. Install
 Arduino-ESP32 3.3.6 using Arduino CLI's Espressif package index. Prefer an
 isolated CLI config/sketchbook when evaluating; do not overwrite existing
 Arduino installations.
 
 ```sh
-export HYPERDHT_DIR=/path/to/private/hyperdht-cpp
-export HOLESAIL_DIR=/path/to/private/holesail-cpp
+export HYPERDHT_DIR=/path/to/hyperdht-embedded
+export HOLESAIL_DIR=/path/to/holesail-codecs
 export ARDUINO_SDK=/path/to/arduino-data/packages/esp32/tools/esp32s3-libs/3.3.6
 nix develop "$HYPERDHT_DIR#esp32"
 cd /path/to/hyperdht-arduino
@@ -134,4 +134,4 @@ N4R2 and N16R8 hardware. These operator reports supplement the automated build
 checks; they do not establish load/reconnect reliability or runtime memory
 peaks. No agent flashing was performed. Exact Axiometa FQBN/CLI 1.5.1, Studio
 ZIP acceptance and catalog/Library Manager integration remain separate checks.
-Nothing has been published, registered or submitted to Axiometa.
+No Studio integration or Library Manager registration is claimed.

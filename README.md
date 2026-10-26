@@ -5,6 +5,13 @@ framework and IDE used to write and upload the application. This package does
 not provide general Arduino-board support: Uno, Mega and Uno R4 are unsupported.
 The packaged library requires Arduino-ESP32 **3.3.6**.
 
+Download the installable library from the
+[v0.1.0 evaluation release](https://github.com/jjacke13/hyperdht-arduino/releases/tag/v0.1.0).
+Choose `HyperDHT_ESP32-0.1.0.zip`, then use Arduino IDE's **Sketch → Include
+Library → Add .ZIP Library**. The automatically generated GitHub source ZIP
+is the source/build repository, not the installable library package. On NixOS,
+launch the IDE with `python3` in PATH.
+
 ## Tested hardware
 
 | ESP32-S3 variant | Flash | PSRAM | Arduino PSRAM setting |
@@ -24,6 +31,8 @@ Holesail-compatible server for one static webpage:
 ```cpp
 #include <Arduino.h>
 #include <HolesailWebServer.h>
+
+SET_LOOP_TASK_STACK_SIZE(32768);
 
 HolesailWebServer server;
 static const char page[] = "<h1>Hello from ESP32</h1>";
@@ -65,11 +74,19 @@ ESP32-S3 N4R2 (4 MB flash / 2 MB quad PSRAM) or standard WROOM-1 N16R8
 The sketch has no display dependency and does not use any board-specific GPIO.
 Other ESP32 variants have not been validated.
 
+Use separate pinned dependency clones. From the root of this repository:
+
 ```sh
-export HYPERDHT_DIR=/home/jacke/agents/alberto/work/hyperdht-demo
-export HOLESAIL_DIR=/home/jacke/agents/alberto/work/holesail-esp32
+git clone https://github.com/jjacke13/hyperdht-cpp.git ../hyperdht-embedded
+git -C ../hyperdht-embedded checkout bb16c0b0fab5c4dccfde50120955ea0a1730b903
+git -C ../hyperdht-embedded submodule update --init --recursive
+git -C ../hyperdht-embedded apply "$PWD/embedded-tls.patch"
+git clone https://github.com/jjacke13/holesail-cpp.git ../holesail-codecs
+git -C ../holesail-codecs checkout 8e1efbe4b79dc7d4695eaf2dcfae39bd4cb7769e
+
+export HYPERDHT_DIR="$(realpath ../hyperdht-embedded)"
+export HOLESAIL_DIR="$(realpath ../holesail-codecs)"
 nix develop "$HYPERDHT_DIR#esp32"
-cd /home/jacke/Desktop/repos/hyperdht-arduino
 bash scripts/build.sh
 ```
 
@@ -85,7 +102,10 @@ component versions as well as the direct dependencies.
 The underlying HyperDHT checkout must be bb16c0b0fab5c4dccfde50120955ea0a1730b903
 with `embedded-tls.patch` applied; UDX submodule is
 759bf7641347f65a1896d4bc4c3b1606a459f466. Holesail codecs come unmodified from
-f57d423b2d65a660468cbb8029536ec99b9e79c2. No owner checkout needs modification.
+8e1efbe4b79dc7d4695eaf2dcfae39bd4cb7769e. The earlier local pin
+f57d423b2d65a660468cbb8029536ec99b9e79c2 remains accepted for existing builds;
+the four codec source/header files used here match byte-for-byte. The public
+revision above is available from GitHub. No owner checkout needs modification.
 The TLS patch removes an embedded per-task RNG allocation that previously
 overflowed the idle-task stack. HyperDHT local main now contains the fix at
 `66f75c97c9bdb1c77dafd761f18043063d1c064f`; this app retains its tested base
@@ -160,8 +180,9 @@ retain an existing seed and public link. Erasing the NVS partition loses it.
 ## Checks
 
 ```sh
-export HYPERDHT_DIR=/home/jacke/agents/alberto/work/hyperdht-demo
-export HOLESAIL_DIR=/home/jacke/agents/alberto/work/holesail-esp32
+# From the repository root, using the dependency clones above:
+export HYPERDHT_DIR="$(realpath ../hyperdht-embedded)"
+export HOLESAIL_DIR="$(realpath ../holesail-codecs)"
 nix-shell tests/shell.nix --run tests/run.sh
 ```
 
@@ -181,4 +202,4 @@ measurement or a performance comparison with Ghost Node.
 AGPL-3.0-or-later; see LICENSE. The wrapper adapts Ghost Node's public server
 and HTTP parser. HyperDHT, Holesail and all third-party dependencies retain
 their original licenses/notices; those source trees are not copied into this
-repository. Nothing is published or registered with Library Manager.
+repository. The library is not registered with Arduino Library Manager.

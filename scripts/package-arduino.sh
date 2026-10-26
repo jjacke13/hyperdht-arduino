@@ -10,7 +10,11 @@ for dir in "$HYPERDHT_DIR" "$HOLESAIL_DIR"; do
     [[ "$(git -C "$dir" rev-parse --show-toplevel)" == "$(realpath "$dir")" ]]
 done
 [[ "$(git -C "$HYPERDHT_DIR" rev-parse HEAD)" == bb16c0b0fab5c4dccfde50120955ea0a1730b903 ]]
-[[ "$(git -C "$HOLESAIL_DIR" rev-parse HEAD)" == f57d423b2d65a660468cbb8029536ec99b9e79c2 ]]
+holesail_revision=$(git -C "$HOLESAIL_DIR" rev-parse HEAD)
+case "$holesail_revision" in
+    8e1efbe4b79dc7d4695eaf2dcfae39bd4cb7769e|f57d423b2d65a660468cbb8029536ec99b9e79c2) ;;
+    *) echo 'Use the pinned Holesail codec revision from README.md' >&2; exit 1 ;;
+esac
 [[ "$(git -C "$HYPERDHT_DIR/deps/libudx" rev-parse --show-toplevel)" == "$(realpath "$HYPERDHT_DIR/deps/libudx")" ]]
 [[ "$(git -C "$HYPERDHT_DIR/deps/libudx" rev-parse HEAD)" == 759bf7641347f65a1896d4bc4c3b1606a459f466 ]]
 git -C "$HYPERDHT_DIR" apply --reverse --check "$PWD/embedded-tls.patch"
@@ -58,7 +62,7 @@ tar -czf "$package/extras/sources/libsodium.tar.gz" --exclude=.git -C "$SODIUM_D
 cp embedded-tls.patch "$package/extras/sources/"
 tar -czf "$package/extras/sources/arduino-wrapper.tar.gz" \
     arduino src scripts/package-arduino.sh scripts/check-tls.py embedded-tls.patch LICENSE ARDUINO-CLI.md
-printf '%s\n' 'HyperDHT bb16c0b + embedded-tls.patch; UDX 759bf764; Holesail f57d423; libsodium 1.0.21.' \
+printf '%s\n' "HyperDHT bb16c0b + embedded-tls.patch; UDX 759bf764; Holesail $holesail_revision; libsodium 1.0.21." \
     'Native archive rebuilt against Arduino-ESP32 3.3.6 stock ESP32-S3 SDK, not ESP-IDF component archives.' \
     'Evaluation only: compile/link checks do not establish hardware startup or client interoperability.' \
     'Extract source archives and place libudx under hyperdht-cpp/deps/libudx; apply embedded-tls.patch.' \

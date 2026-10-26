@@ -66,8 +66,10 @@ with `embedded-tls.patch` applied; UDX submodule is
 759bf7641347f65a1896d4bc4c3b1606a459f466. Holesail codecs come unmodified from
 f57d423b2d65a660468cbb8029536ec99b9e79c2. No owner checkout needs modification.
 The TLS patch removes an embedded per-task RNG allocation that previously
-overflowed the idle-task stack. It is required until an accepted upstream
-replacement is pinned and tested.
+overflowed the idle-task stack. HyperDHT local main now contains the fix at
+`66f75c97c9bdb1c77dafd761f18043063d1c064f`; this app retains its tested base
+revision plus patch. A future pin update must remove the duplicate patch step
+and update the build guard before validating the new dependency revision.
 
 ### N16R8 memory profile
 

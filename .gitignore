@@ -1,0 +1,8 @@
+build/
+build-tests/
+managed_components/
+sdkconfig
+sdkconfig.old
+sdkconfig.local
+sdkconfig.before-selective
+dependencies.lock

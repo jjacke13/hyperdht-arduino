@@ -38,6 +38,9 @@ core running underneath. Build it using Nix and ESP-IDF. This is not yet an
 Arduino IDE/Library Manager ZIP: copying this directory into Arduino libraries
 does not install or configure the native dependencies.
 
+See [AXIOMETA-INTEGRATION.md](AXIOMETA-INTEGRATION.md) for the source-reviewed
+Axiometa packaging workflow and the remaining Arduino CLI integration work.
+
 Pinned integration: ESP-IDF 5.5.2, Arduino-ESP32 3.3.6, libsodium 1.0.21;
 ESP32-S3 N4R2 (4 MB flash / 2 MB quad PSRAM) or standard WROOM-1 N16R8
 (16 MB flash / 8 MB octal PSRAM), 3 MiB factory partition, no OTA.

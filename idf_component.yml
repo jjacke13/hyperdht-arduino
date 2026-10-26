@@ -1,0 +1,9 @@
+description: Arduino-style public Holesail HTTP server and HyperDHT lifecycle for ESP32-S3
+license: AGPL-3.0-or-later
+version: 0.1.0
+targets:
+  - esp32s3
+dependencies:
+  idf: "==5.5.2"
+  espressif/arduino-esp32: "==3.3.6"
+  espressif/libsodium: "==1.0.21"

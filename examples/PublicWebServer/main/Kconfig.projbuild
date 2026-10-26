@@ -1,0 +1,8 @@
+menu "P2P example"
+config P2P_WIFI_SSID
+    string "Wi-Fi SSID"
+    default "YOUR_WIFI_SSID"
+config P2P_WIFI_PASSWORD
+    string "Wi-Fi password"
+    default ""
+endmenu

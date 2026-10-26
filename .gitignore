@@ -1,8 +1,8 @@
 build/
 build-tests/
+build-tests-config/
 managed_components/
 sdkconfig
 sdkconfig.old
 sdkconfig.local
 sdkconfig.before-selective
-dependencies.lock

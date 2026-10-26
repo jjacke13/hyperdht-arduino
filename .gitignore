@@ -9,3 +9,7 @@ sdkconfig.local
 sdkconfig.before-selective
 sdkconfig.n16r8
 sdkconfig.n16r8.old
+build-arduino-native/
+build-arduino-cli/
+dist/
+wifi_config.h

@@ -5,6 +5,14 @@ the current native stack builds as ESP-IDF components, while Axiometa's
 published CLI builds sketches with Arduino CLI. This assessment changes no
 firmware and does not claim a Studio build has passed.
 
+Update after implementation on 2026-10-26: the native distribution gap below
+now has an evaluation implementation. [ARDUINO-CLI.md](ARDUINO-CLI.md) documents
+a ZIP installed and compiled with stock Arduino-ESP32 3.3.6 for generic N4R2
+and N16R8 profiles, including full server linkage and zero GCC TLS. The original
+assessment below records the plan and source research. Exact Axiometa
+FQBN/CLI 1.5.1, Studio acceptance, hardware checks and catalog publication are
+still outstanding; this is not a Studio-ready claim.
+
 ## Their organization
 
 | Layer | Observed organization | Implication for this library |

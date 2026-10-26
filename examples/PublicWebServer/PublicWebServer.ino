@@ -4,6 +4,23 @@
 #include <HolesailWebServer.h>
 #include "esp_random.h"
 
+SET_LOOP_TASK_STACK_SIZE(32768);
+
+#if defined(CONFIG_P2P_WIFI_SSID)
+static const char *wifiSSID = CONFIG_P2P_WIFI_SSID;
+static const char *wifiPassword = CONFIG_P2P_WIFI_PASSWORD;
+#else
+// Optional local file defines P2P_WIFI_SSID and P2P_WIFI_PASSWORD.
+#if __has_include("wifi_config.h")
+#include "wifi_config.h"
+#else
+#define P2P_WIFI_SSID "YOUR_WIFI_SSID"
+#define P2P_WIFI_PASSWORD ""
+#endif
+static const char *wifiSSID = P2P_WIFI_SSID;
+static const char *wifiPassword = P2P_WIFI_PASSWORD;
+#endif
+
 HolesailWebServer server;
 static const char page[] = "<!doctype html><meta name='viewport' content='width=device-width'>"
     "<title>ESP32 P2P</title><h1>Hello from an ESP32.</h1>"
@@ -11,12 +28,12 @@ static const char page[] = "<!doctype html><meta name='viewport' content='width=
 
 void setup() {
     Serial.begin(115200);
-    if (!CONFIG_P2P_WIFI_SSID[0]) {
-        Serial.println("Set Wi-Fi in menuconfig > P2P example");
+    if (!wifiSSID[0]) {
+        Serial.println("Configure Wi-Fi before starting the example");
         return;
     }
     WiFi.mode(WIFI_STA);
-    WiFi.begin(CONFIG_P2P_WIFI_SSID, CONFIG_P2P_WIFI_PASSWORD);
+    WiFi.begin(wifiSSID, wifiPassword);
     while (WiFi.status() != WL_CONNECTED) delay(100);
 
     // Keep the public link across reboots; generate only after Wi-Fi enables RNG.

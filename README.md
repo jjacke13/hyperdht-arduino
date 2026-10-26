@@ -32,14 +32,15 @@ announcement and successful signed metadata publication.
 
 ## Supported build
 
-This initial version is an **Arduino-framework ESP-IDF component**. The actual
-application uses Arduino APIs, `setup()` and `loop()`, with Espressif's Arduino
-core running underneath. Build it using Nix and ESP-IDF. This is not yet an
-Arduino IDE/Library Manager ZIP: copying this directory into Arduino libraries
-does not install or configure the native dependencies.
+The existing **Arduino-framework ESP-IDF component** build below remains
+supported. There is now also a Nix-built **Arduino library ZIP** for stock
+Arduino-ESP32 3.3.6 on ESP32-S3: see [ARDUINO-CLI.md](ARDUINO-CLI.md) for package
+creation, ZIP installation, compile commands and validation limits. Copying the
+raw repository into Arduino libraries does not install the native stack;
+install the generated package instead. It is not published in Library Manager.
 
 See [AXIOMETA-INTEGRATION.md](AXIOMETA-INTEGRATION.md) for the source-reviewed
-Axiometa packaging workflow and the remaining Arduino CLI integration work.
+Axiometa packaging workflow and the remaining Studio/catalog integration work.
 
 Pinned integration: ESP-IDF 5.5.2, Arduino-ESP32 3.3.6, libsodium 1.0.21;
 ESP32-S3 N4R2 (4 MB flash / 2 MB quad PSRAM) or standard WROOM-1 N16R8

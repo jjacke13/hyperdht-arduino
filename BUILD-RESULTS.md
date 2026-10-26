@@ -1,8 +1,9 @@
 # Initial integration checks — 2026-10-26
 
 Scope: a new Arduino-framework library/component and separate static-webpage
-example. No Ghost Node or ping-app files changed; both existing repos checked
-clean. No physical hardware was flashed. No remote, publication or email.
+example. Initial integration left Ghost Node and the ping app unchanged.
+The operator subsequently flashed the N16R8; the hardware check below reads
+that running firmware. No agent flashing, remote, publication or email.
 
 ## Firmware cross-build
 
@@ -66,13 +67,6 @@ The emulator was stopped at entry to setup, before Serial/Wi-Fi/server setup.
 This proves neither Wi-Fi nor actual P2P operation. Emulator and debugger were
 terminated after the check; no lab, device or running service was touched.
 
-## Not yet verified
-
-No flash/runtime/phone test of this Arduino example, reconnect/soak or peak
-internal/PSRAM measurements. Earlier Ghost Node operator successes do not prove
-this new Arduino integration. Arduino IDE/Library Manager and Axiometa Studio
-packaging are outside this first ESP-IDF-component build.
-
 ## Separate N16R8 profile — 2026-10-26
 
 Operator flashed the N4R2-profile image onto another ESP32-S3 identified as
@@ -99,10 +93,42 @@ passes.
 The default N4R2 build was then rerun successfully with its original quad
 configuration, required symbols and TLS0, confirming the two build paths.
 
-No runtime library or sketch code changed. Octal-PSRAM hardware boot
-and networking remain unverified; earlier quad-PSRAM QEMU startup is not N16R8
-runtime evidence. No device was reset/flashed by the agent.
+No runtime library or sketch code changed for the profile correction.
+The earlier quad-PSRAM QEMU startup is not N16R8 runtime evidence; the separate
+hardware check below supplies that evidence. No device was reset/flashed by
+the agent.
 
 Source review also confirms Ghost Node reads its persisted `ghost-node/seed`
 and generates only when missing. Its public key survives normal power cycles.
 This Arduino example independently persists `p2p-arduino/seed`.
+
+## N16R8 hardware check — 2026-10-26
+
+Moving from the board's USB-to-UART connector to its native USB connector
+exposed the application console. ROM boot messages on the UART bridge followed
+by silence had not established an application stall. Firmware sends ESP-IDF
+logs and Arduino `Serial` through native hardware USB Serial/JTAG.
+
+A read-only JTAG snapshot identified `arduino-p2p` 0.1.0. The application
+descriptor ELF hash exactly matched `build-n16r8/arduino-p2p.elf`:
+`a19c06229b4e408ee2a960fae01504014be60e9516181875466c4e2f40b1c987`.
+The matching-ELF backtrace showed the Arduino task in `loop()` at `delay(10)`;
+the idle task was waiting for an interrupt. Server metadata was published.
+The debugger resumed the CPU and shut down without reset or flash writes.
+
+Native serial output then reported:
+
+```text
+ready=1 PSRAM used=29816/8388608 internal free=227043
+```
+
+This is one idle snapshot: about 29.1 KiB PSRAM, 0.36% of the available 8 MiB.
+The operator subsequently confirmed webpage loading. There is no timed
+comparison with Ghost Node, and this does not measure peak memory under load.
+
+## Remaining verification
+
+Reconnect/soak, concurrent-client load and peak internal/PSRAM measurements
+remain unverified for this Arduino build. The N4R2 Arduino profile has build
+and emulator evidence only. Arduino IDE/Library Manager and Axiometa Studio
+packaging are outside this ESP-IDF-component build.

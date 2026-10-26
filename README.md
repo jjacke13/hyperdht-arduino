@@ -57,8 +57,8 @@ dependencies. Selective compilation enables WiFi, Network and Preferences.
 Configure Wi-Fi with `idf.py menuconfig` from `examples/PublicWebServer`
 (P2P example), then rerun the build. Keep credentials in ignored local config;
 never distribute a firmware image compiled with personal Wi-Fi credentials.
-The build-check image uses the public placeholder `YOUR_WIFI_SSID`; configure
-your network before flashing. The committed dependency lock pins transitive
+The initial build-check image used the public placeholder `YOUR_WIFI_SSID`;
+configure your network before flashing. The committed dependency lock pins transitive
 component versions as well as the direct dependencies.
 
 The underlying HyperDHT checkout must be bb16c0b0fab5c4dccfde50120955ea0a1730b903
@@ -95,6 +95,18 @@ confirmed N16R8, flash from the example directory using:
 ```sh
 idf.py -B build-n16r8 -p PORT flash monitor
 ```
+
+Use the board's **native USB/OTG connector**, not a USB-to-UART connector.
+Both the ESP-IDF console and Arduino `Serial` use hardware USB Serial/JTAG.
+A UART bridge can show ROM boot messages and then go silent while the app runs.
+For a board already flashed with the N16R8 build, monitoring alone is enough:
+
+```sh
+idf.py -B build-n16r8 -p PORT monitor
+```
+
+The sketch prints `ready=1` and its public `hs://` link every 30 seconds once
+the server is ready. Exit the monitor with Ctrl+]. For N4R2, use `-B build`.
 
 No whole-flash erase is required. This example keeps its seed in the
 `p2p-arduino` NVS namespace; Ghost Node uses `ghost-node`. Normal power cycles
@@ -135,6 +147,11 @@ publication state, original Holesail URL vector, metadata sequence/retry,
 HTTP framing/bounds, response backpressure, slot limits, idle close and IP
 refresh. Mock transport tests do not establish actual P2P interoperability.
 See BUILD-RESULTS.md for the cross-build and hardware evidence boundaries.
+
+On the N16R8, a matched-firmware hardware check confirmed `loop()` execution
+and `ready=1`; the operator then confirmed the webpage loads. One idle snapshot
+used 29,816 bytes of the 8 MiB PSRAM (about 29.1 KiB). This is not a peak-memory
+measurement or a performance comparison with Ghost Node.
 
 ## License
 

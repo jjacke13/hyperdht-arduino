@@ -1,17 +1,16 @@
 # hyperdht-tiny
 
-Design for a bounded HyperDHT-compatible endpoint on small microcontrollers.
-The primary feasibility target is the Uno R4's Renesas RA4M1: 256 KiB flash,
-32 KiB SRAM. An ESP32-S3 build would be a development target, not evidence of
-RA4M1 memory fit.
+Bounded HyperDHT client and listener for the Arduino Uno R4 WiFi. The
+protocol runs on the Renesas RA4M1 (256 KiB flash and 32 KiB SRAM), and the
+stock ESP32-S3 bridge supplies Wi-Fi and UDP.
 
-Separate connector and listener APIs would share a bounded protocol core.
-Applications could select either role, with NAT traversal in an optional
-library. No DHT storage service, maintained routing table, buckets or public-key
-allowlist. Exact peer authentication remains required. The listener would
-announce its own presence to external DHT nodes.
+The connector and listener share a bounded protocol core. Each sketch uses
+one role. The listener announces to external DHT nodes and accepts a
+single active session. The connector authenticates the selected peer's
+exact key. See the [main architecture guide](../docs/ARCHITECTURE.md)
+for current protocol scope, board results and limits.
 
-**Status: resumed (2026-11-22).** Fixed-buffer RPC/discovery, a fixed UDX
+Fixed-buffer RPC/discovery, a fixed UDX
 receive pool and bounded encrypted records have host sanitizer tests. Wire
 tests compare RPC, Noise IK transcripts and encrypted records with the original implementations.
 A direct connector now completes discovery and encrypted exchange against an
@@ -19,18 +18,19 @@ original-component fixture, and authenticates/exchanges data with an actual
 hyperdht-cpp server in an isolated loopback network namespace. The
 [Uno R4 WiFi echo example](examples/uno-r4-echo/) also runs on the RA4M1.
 It completed public-key lookup and encrypted echo with remote and LAN
-JavaScript peers. Listener support remains open.
+JavaScript peers. The [standalone listener](examples/uno-r4-listener/)
+completed a remote and LAN echo and kept its key through a power cycle.
 See [connector scope](docs/CONNECTOR.md) and [measurements and limits](docs/MEASUREMENTS.md).
 
-The [Arduino library preview](ARDUINO-CLI.md) packages the outbound client
-and an echo sketch for Uno R4 WiFi. It includes a build helper for the
+The [Arduino library preview](ARDUINO-CLI.md) packages both roles and
+their echo sketches for Uno R4 WiFi. It includes a build helper for the
 required linker and WiFiS3 settings.
 
 See [the design and feasibility gates](docs/DESIGN.md).
 
-This is separate from the existing ESP32 apps and Arduino-framework component.
-Selected protocol code is adapted with [provenance](PROVENANCE.md) and original
-licenses. Existing projects are not modified. No remote is set.
+This directory is the Uno R4 WiFi target of the shared Arduino repository.
+Selected protocol code retains its [provenance](PROVENANCE.md) and original
+licenses.
 
 ## Host checks with Nix
 
@@ -89,5 +89,6 @@ the real board entropy hook still fails closed.
 
 An [opt-in RA4M1 SCE5 entropy adapter](docs/R4-ENTROPY.md) now has host contract
 and failure-path tests. The [Uno R4 WiFi SDK link check](docs/R4-SDK-LINK.md)
-measures the SCE5 and WiFiS3 driver costs. Board runtime and packet exchange
-remain pending.
+measures the SCE5 and WiFiS3 driver costs. See
+[current verification](../docs/ARCHITECTURE.md#verification) for evidence
+from the packaged sketches and standalone firmware.

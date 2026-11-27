@@ -1,7 +1,13 @@
 # HyperDHT for Arduino
 
-Both board packages expose HyperDHT client and server APIs and include echo
-sketches. The ESP32-S3 package also includes a Holesail webpage server.
+Connect to a microcontroller by its public key and exchange encrypted data
+over HyperDHT. Both board packages include client and server sketches. The
+ESP32-S3 package can also serve a webpage through Holesail.
+
+- [Quickstart](docs/QUICKSTART.md) walks through a first echo using one board
+  and a computer, including how to flash each board and what success looks like.
+- [Architecture and interoperability](docs/ARCHITECTURE.md) covers the
+  connection path, board-specific limits, source pins and test evidence.
 
 | Board | Implementation | Start here |
 |---|---|---|
@@ -42,7 +48,7 @@ ships the Holesail webpage example.
 
 Hardware testing is reported for these two variants. Other ESP32 chips and
 board configurations have not been validated. See
-[build and validation details](ARDUINO-CLI.md#verified-scope--2026-10-26) for
+[build and validation details](docs/ARCHITECTURE.md#verification) for
 the checks performed and remaining limits.
 
 Write ordinary Arduino `setup()`/`loop()` application code while HyperDHT

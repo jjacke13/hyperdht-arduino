@@ -93,5 +93,8 @@ DHT. The fixture drops initial direct datagrams until the listener has sent
 to that exact peer. The filtered stable-mapping test observed the drop, a
 listener punch, multiple exact encrypted echoes, EOF, a second client using
 the same public key, and clean withdrawal. The open-client path also passed.
-Matrix visibility, publication refresh timing and repeated connections on the
-physical board remain hardware checks.
+The standalone sketch also completed repeated authenticated 1 KiB echoes
+with a stock JavaScript HyperDHT client on the physical board. Remote and LAN
+paths were exercised, and the key survived a power cycle. See the
+[verification table](../../../docs/ARCHITECTURE.md#verification) for the
+scope of that evidence and the separate packaged sketch builds.

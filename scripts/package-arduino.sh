@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-: "${IDF_PATH:?Enter the HyperDHT esp32 Nix shell}"
+if ! command -v xtensa-esp32s3-elf-g++ >/dev/null; then
+    echo 'Put the ESP32-S3 cross-compiler on PATH (for example, enter the HyperDHT esp32 Nix shell)' >&2
+    exit 1
+fi
 : "${HYPERDHT_DIR:?Set the private pinned HyperDHT checkout}"
 : "${HOLESAIL_DIR:?Set the pinned Holesail codec checkout}"
 : "${ARDUINO_SDK:?Set the installed Arduino-ESP32 3.3.6 esp32s3-libs directory}"
@@ -32,14 +35,17 @@ stage=$(mktemp -d "$PWD/dist-stage.XXXXXX")
 trap 'rm -rf -- "$stage"' EXIT
 package="$stage/HyperDHT_ESP32"
 mkdir -p "$package/src/esp32s3" "$package/src/hyperdht" \
-    "$package/examples/PublicWebServer" "$package/extras/sources"
+    "$package/examples" "$package/extras/sources"
 cp arduino/library.properties LICENSE "$package/"
 cp ARDUINO-CLI.md "$package/extras/"
 cp src/HyperDHTNode.h src/HolesailWebServer.h "$package/src/"
 cp "$HYPERDHT_DIR/include/hyperdht/hyperdht.h" "$package/src/hyperdht/"
 cp build-arduino-native/libhyperdht_native.a "$package/src/esp32s3/"
 xtensa-esp32s3-elf-objcopy --strip-debug "$package/src/esp32s3/libhyperdht_native.a"
-cp examples/PublicWebServer/PublicWebServer.ino "$package/examples/PublicWebServer/"
+for sketch in HyperDHTEchoClient HyperDHTEchoServer PublicWebServer; do
+    mkdir -p "$package/examples/$sketch"
+    cp "examples/$sketch/$sketch.ino" "$package/examples/$sketch/"
+done
 cat > "$package/src/HyperDHTTarget.h" <<'EOF'
 #pragma once
 #include <sdkconfig.h>
@@ -61,7 +67,9 @@ tar -czf "$package/extras/sources/libsodium.tar.gz" --exclude=.git -C "$SODIUM_D
     CMakeLists.txt Kconfig LICENSE idf_component.yml libsodium port port_include
 cp embedded-tls.patch "$package/extras/sources/"
 tar -czf "$package/extras/sources/arduino-wrapper.tar.gz" \
-    arduino src scripts/package-arduino.sh scripts/check-tls.py embedded-tls.patch LICENSE ARDUINO-CLI.md
+    arduino src scripts/package-arduino.sh scripts/check-tls.py embedded-tls.patch LICENSE ARDUINO-CLI.md \
+    examples/HyperDHTEchoClient/HyperDHTEchoClient.ino \
+    examples/HyperDHTEchoServer/HyperDHTEchoServer.ino examples/PublicWebServer/PublicWebServer.ino
 printf '%s\n' "HyperDHT bb16c0b + embedded-tls.patch; UDX 759bf764; Holesail $holesail_revision; libsodium 1.0.21." \
     'Native archive rebuilt against Arduino-ESP32 3.3.6 stock ESP32-S3 SDK, not ESP-IDF component archives.' \
     'Evaluation only: compile/link checks do not establish hardware startup or client interoperability.' \
@@ -71,7 +79,8 @@ printf '%s\n' "HyperDHT bb16c0b + embedded-tls.patch; UDX 759bf764; Holesail $ho
 sha256sum "$ARDUINO_SDK"/flags/* "$ARDUINO_SDK/qio_qspi/include/sdkconfig.h" \
     | sed "s|$ARDUINO_SDK/||g" > "$package/extras/sdk-sha256.txt"
 mkdir -p dist
-python - "$stage" "$PWD/dist/HyperDHT_ESP32-0.1.0.zip" <<'PY'
+version=$(sed -n 's/^version=//p' arduino/library.properties)
+python - "$stage" "$PWD/dist/HyperDHT_ESP32-$version.zip" <<'PY'
 from pathlib import Path
 from zipfile import ZipFile, ZIP_DEFLATED
 import sys

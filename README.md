@@ -1,20 +1,19 @@
 # HyperDHT for Arduino
 
-This repository contains two board targets with their own build instructions
-and examples.
+Both board packages expose HyperDHT client and server APIs and include echo
+sketches. The ESP32-S3 package also includes a Holesail webpage server.
 
 | Board | Implementation | Start here |
 |---|---|---|
-| ESP32-S3 (N4R2 and N16R8 tested) | HyperDHT and Holesail on Arduino-ESP32 | [ESP32-S3 instructions below](#esp32-s3), [Arduino library ZIP](ARDUINO-CLI.md) |
-| Arduino Uno R4 WiFi | HyperDHT Tiny on the Renesas RA4M1, using the stock ESP32-S3 Wi-Fi bridge | [Uno R4 WiFi listener](uno-r4-wifi/examples/uno-r4-listener/README.md), [outbound client ZIP](uno-r4-wifi/ARDUINO-CLI.md) |
+| ESP32-S3 (N4R2 and N16R8 tested) | HyperDHT client/server and Holesail webpage server | [ESP32-S3 Arduino library ZIP and examples](ARDUINO-CLI.md) |
+| Arduino Uno R4 WiFi | HyperDHT Tiny client/server on the Renesas RA4M1, using the stock ESP32-S3 Wi-Fi bridge | [Uno R4 WiFi Arduino library ZIP and examples](uno-r4-wifi/ARDUINO-CLI.md) |
 
-For the R4, run the documented build commands from `uno-r4-wifi/`. The
-listener sketch and the outbound client ZIP are separate entry points. The R4
-listener supports one active session and up to 1 KiB of plaintext per record.
-Hardware tests verified an authenticated echo with the stock HyperDHT client
-over both a remote connection and the LAN, and confirmed the listener kept
-its public key across a power cycle. The ESP32-S3 ZIP below provides the
-Holesail web server API.
+Build the Uno R4 WiFi package from `uno-r4-wifi/` and use its compile helper
+for the required stack reservation and Wi-Fi library patch. Build one role
+per sketch. The R4 listener supports one active session and up to 1 KiB
+of plaintext per record. The [standalone listener demo](uno-r4-wifi/examples/uno-r4-listener/README.md)
+also includes persistent settings and an LED animation. Hardware tests of
+that demo verified remote and LAN echoes and a stable key across power cycles.
 
 The [Tiny source](uno-r4-wifi/) was imported from HyperDHT Tiny revision
 `fbe4ef1c360aa3c8d039863326131eabf6d9ebda`. It retains its own
@@ -27,12 +26,12 @@ framework and IDE used to write and upload the application. This package does
 not provide general Arduino-board support: Uno, Mega and Uno R4 are unsupported.
 The packaged library requires Arduino-ESP32 **3.3.6**.
 
-Download the installable library from the
-[v0.1.0 evaluation release](https://github.com/jjacke13/hyperdht-arduino/releases/tag/v0.1.0).
-Choose `HyperDHT_ESP32-0.1.0.zip`, then use Arduino IDE's **Sketch → Include
-Library → Add .ZIP Library**. The automatically generated GitHub source ZIP
-is the source/build repository, not the installable library package. On NixOS,
-launch the IDE with `python3` in PATH.
+Build `HyperDHT_ESP32-0.2.0.zip` using the [packaging guide](ARDUINO-CLI.md).
+Install it with Arduino IDE's **Sketch → Include Library → Add .ZIP Library**.
+It includes `HyperDHTEchoClient`, `HyperDHTEchoServer` and `PublicWebServer`
+under **File → Examples**. On NixOS, launch the IDE with `python3` in PATH.
+The older [v0.1.0 evaluation release](https://github.com/jjacke13/hyperdht-arduino/releases/tag/v0.1.0)
+ships the Holesail webpage example.
 
 ## Tested hardware
 

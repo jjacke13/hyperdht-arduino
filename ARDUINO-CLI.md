@@ -13,10 +13,11 @@ Tested hardware variants:
 These are the reported hardware tests, not a compatibility claim for all
 ESP32 boards. The packaged native library requires Arduino-ESP32 **3.3.6**.
 
-The generated `dist/HyperDHT_ESP32-0.1.0.zip` installs as an ordinary Arduino
-library. It exposes `HyperDHTNode` and `HolesailWebServer` and includes the
-small `PublicWebServer` sketch. No display or board-specific GPIO dependency.
-The existing ESP-IDF component build remains supported.
+The generated `dist/HyperDHT_ESP32-0.2.0.zip` installs as an ordinary Arduino
+library. `HyperDHTNode` manages the event loop and exposes a native handle for
+the bundled HyperDHT C client, server and encrypted-stream APIs. The package
+also exposes `HolesailWebServer` for a public webpage. The examples have no
+display or board-specific GPIO dependency.
 
 This first package targets **ESP32-S3, stock Arduino-ESP32 3.3.6 only**.
 It contains a native archive rebuilt against that core's actual SDK headers,
@@ -51,21 +52,20 @@ tested unicore component firmware.
 
 The ZIP contains corresponding native source archives, the embedded patch,
 licenses, rebuild CMake/script, pinned revisions and SDK flag/config hashes.
-Generated ZIPs and build directories stay ignored. Only the unconfigured
-example enters the ZIP; local Wi-Fi files, SDK configs and identities do not.
+Generated ZIPs and build directories stay ignored. The package script copies
+the three unconfigured example sketches by name.
 
 ## Install and compile
 
 Use Arduino IDE's **Add .ZIP Library**, or Arduino CLI's `lib install
---zip-path /path/to/HyperDHT_ESP32-0.1.0.zip`. CLI ZIP installation requires
+--zip-path /path/to/HyperDHT_ESP32-0.2.0.zip`. CLI ZIP installation requires
 `library.enable_unsafe_install=true`; enable that only in the intended
 evaluation config. With a custom config, add `--config-file /path/to/config.yaml`
 to each CLI command below.
 
 On NixOS, use `nix shell nixpkgs#arduino-cli nixpkgs#python3`; the packaged CLI
 provides its compiler runtime environment, while Python is needed by the ESP32
-build recipes. This evaluation used CLI 1.4.1 and core 3.3.6; Axiometa's source
-pins CLI 1.5.1, so that exact CLI version remains an integration check.
+build recipes. The current package was checked with CLI 1.3.1 and core 3.3.6.
 
 For Arduino IDE on NixOS, launch the IDE from an environment providing
 `python3` in PATH. This was needed for the operator's successful IDE workflow.
@@ -88,10 +88,10 @@ These generic Espressif FQBNs verify packaging; they do not replace Axiometa's
 unavailable authenticated Genesis Mini board definitions. Select the actual
 board's memory and USB profile before any hardware use.
 
-The example keeps `SET_LOOP_TASK_STACK_SIZE(32768)` at file scope. Keep that
-setting when writing a server sketch, and call the APIs only from the owning
+The sketches keep `SET_LOOP_TASK_STACK_SIZE(32768)` at file scope. Keep that
+setting when using this package, and call the APIs only from the owning
 `setup()`/`loop()` task. It polls asynchronously; do not call methods from Wi-Fi
-callbacks or interrupt handlers. Public mode accepts anyone knowing the link.
+callbacks or interrupt handlers.
 
 The example ships with a placeholder Wi-Fi name. For a local CLI build, place
 an ignored `wifi_config.h` beside the `.ino`:
@@ -101,12 +101,31 @@ an ignored `wifi_config.h` beside the `.ino`:
 #define P2P_WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 ```
 
-Use actual credentials only in that private local file. The ESP-IDF build
-continues using its existing menuconfig settings instead. Identity remains in
-the example's `p2p-arduino` NVS namespace across ordinary restarts; this package
-does not contain a seed or change the original Ghost Node application.
+Use actual credentials only in that private local file. The ESP-IDF
+`PublicWebServer` build also supports its existing menuconfig settings.
 
-## Verified scope — 2026-10-26
+## Example sketches
+
+- **HyperDHTEchoServer** uses `hyperdht_server_listen` and opens the encrypted
+  stream inside its connection callback. Open the serial monitor at 115200
+  baud and copy the public key printed when the listener starts announcing.
+  This example uses a fresh identity at boot and echoes at most 1 KiB per
+  session. Anyone with the key may connect.
+- **HyperDHTEchoClient** uses `hyperdht_connect_and_open_stream`. Open its
+  serial monitor at 115200 baud, enable newline and paste the server's
+  64-digit hexadecimal key when prompted. It sends a short message and
+  checks that the encrypted echo matches.
+- **PublicWebServer** starts the public **Holesail** webpage endpoint and
+  prints an `hs://` link. Its identity stays in the `p2p-arduino` NVS namespace
+  across ordinary restarts.
+
+## Build verification
+
+All three sketches in v0.2.0 compiled from the installed ZIP for the generic
+ESP32-S3 N4R2 and N16R8 profiles. The new HyperDHT echo sketches have compile
+and link coverage. The hardware observations below apply to v0.1.0.
+
+## v0.1.0 evaluation — 2026-10-26
 
 The ZIP installed successfully into an isolated Arduino CLI sketchbook. Both
 generic ESP32-S3 profiles compiled through final ELF/image creation using only

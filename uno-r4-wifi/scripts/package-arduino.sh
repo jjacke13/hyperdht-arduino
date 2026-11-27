@@ -28,10 +28,12 @@ flags=(-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
        -Os -ffunction-sections -fdata-sections -std=c99
        -I"$out/include" -I"$headers")
 objects=()
-for unit in rpc discovery udx_rx record noise transport handshake connector punch; do
+for unit in rpc discovery udx_rx record noise transport handshake connector punch listener publish publish_walk listener_punch; do
     "$tools-gcc" "${flags[@]}" -c "$out/src/$unit.c" -o "$out/$unit.o"
     objects+=("$out/$unit.o")
-    cp "$out/include/hdtiny/$unit.h" "$package/src/hdtiny/"
+    if [[ -f "$out/include/hdtiny/$unit.h" ]]; then
+        cp "$out/include/hdtiny/$unit.h" "$package/src/hdtiny/"
+    fi
 done
 "$tools-ar" rcsD "$native/libhdtiny_r4.a" "${objects[@]}"
 cp "$archive" "$native/libsodium.a"
@@ -41,21 +43,26 @@ cp arduino/library.properties LICENSE PROVENANCE.md "$package/"
 cp -R licenses "$package/"
 cp "$sodium_source/LICENSE" "$package/licenses/libsodium.txt"
 cp -R "$headers/"sodium{.h,} "$package/src/"
-cp arduino/HyperDHTClient.{h,cpp} platform/arduino-r4/entropy.{c,h} "$package/src/"
+cp arduino/HyperDHT{Client,Server}.{h,cpp} platform/arduino-r4/entropy.{c,h} "$package/src/"
 cp platform/ra4m1/entropy.c "$package/src/entropy_callback.c"
 # Reject an echo template edited with local network credentials.
-grep -Fqx 'static const char ssid[] = "YOUR_WIFI_SSID";' examples/HyperDHTEcho/HyperDHTEcho.ino
-grep -Fqx 'static const char password[] = "YOUR_WIFI_PASSWORD";' examples/HyperDHTEcho/HyperDHTEcho.ino
-mkdir "$package/examples/HyperDHTEcho"
-cp examples/HyperDHTEcho/HyperDHTEcho.ino "$package/examples/HyperDHTEcho/"
+for name in HyperDHTEcho HyperDHTListenEcho; do
+    sketch=examples/$name/$name.ino
+    grep -Fqx 'static const char ssid[] = "YOUR_WIFI_SSID";' "$sketch"
+    grep -Fqx 'static const char password[] = "YOUR_WIFI_PASSWORD";' "$sketch"
+    mkdir "$package/examples/$name"
+    cp "$sketch" "$package/examples/$name/"
+done
 cp ARDUINO-CLI.md "$package/"
 cp scripts/r4-stack-overlay.py arduino/compile-r4.sh \
-   examples/uno-r4-echo/{hyperdht-echo.cjs,patches/wifis3-1.6.0.patch} "$extras/"
+   examples/uno-r4-echo/{hyperdht-echo.cjs,patches/wifis3-1.6.0.patch} \
+   examples/uno-r4-listener/hyperdht-client.cjs "$extras/"
 tar -czf "$extras/sources/hyperdht-tiny-r4.tar.gz" \
     arduino src include licenses LICENSE PROVENANCE.md ARDUINO-CLI.md \
     docs/R4-SDK-LINK.md scripts/{package-arduino.sh,r4-stack-overlay.py} \
     platform/{arduino-r4,ra4m1}/entropy.* \
-    examples/uno-r4-echo/{patches,hyperdht-echo.cjs} examples/HyperDHTEcho/HyperDHTEcho.ino
+    examples/uno-r4-echo/{patches,hyperdht-echo.cjs} examples/uno-r4-listener/hyperdht-client.cjs \
+    examples/{HyperDHTEcho/HyperDHTEcho,HyperDHTListenEcho/HyperDHTListenEcho}.ino
 tar -czf "$extras/sources/libsodium.tar.gz" -C "$sodium_source" .
 version=$(sed -n 's/^version=//p' arduino/library.properties)
 "${PYTHON:-python3}" - "$stage" "$out/HyperDHT_Tiny_R4-$version.zip" <<'PY'

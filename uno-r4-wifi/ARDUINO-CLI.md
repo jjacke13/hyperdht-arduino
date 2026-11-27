@@ -2,8 +2,9 @@
 
 The library runs on the Renesas RA4M1 and uses the board's ESP32-S3 Wi-Fi
 bridge firmware 0.6.0. This preview targets Arduino Renesas UNO 1.6.0 and
-supports one outbound IPv4 connection by public key. The peer must keep
-each SecretStream plaintext record at or below 1 KiB.
+supports one role per sketch. Use the client for an outbound IPv4 session
+or the server for one active inbound session at a time. Each SecretStream
+plaintext record must be at most 1 KiB.
 
 ## Install and compile
 
@@ -18,6 +19,8 @@ arduino-cli lib install --zip-path /path/to/HyperDHT_Tiny_R4-0.1.0.zip
 library=/path/to/sketchbook/libraries/HyperDHT_Tiny_R4
 cp -R "$library/examples/HyperDHTEcho" /path/to/sketches/
 bash "$library/extras/compile-r4.sh" /path/to/sketches/HyperDHTEcho
+cp -R "$library/examples/HyperDHTListenEcho" /path/to/sketches/
+bash "$library/extras/compile-r4.sh" /path/to/sketches/HyperDHTListenEcho
 ```
 
 The same helper compiles your own sketch directory. The ELF, map and binary
@@ -26,12 +29,16 @@ Arduino CLI needs an explicit Arm toolchain location, set
 `HDT_R4_TOOLCHAIN` to the GCC 7-2017q4 directory. `ARDUINO_CLI` and `PYTHON`
 can point to specific installed executables.
 
-For the echo example, edit the Wi-Fi placeholders in your local copy. On a
-Node.js host, use the bundled `extras/hyperdht-echo.cjs` with
-`hyperdht@6.29.1`. After uploading your configured sketch, open serial at
-115200 and paste the server's 64-character public key followed by a newline.
+Fill in the Wi-Fi placeholders in your local copy of either sketch. With
+`hyperdht@6.29.1` installed on your Node.js host:
 
-## API
+- For `HyperDHTEcho`, run `node extras/hyperdht-echo.cjs`. Paste the host
+  server's 64-character key into the board's serial terminal at 115200.
+- For `HyperDHTListenEcho`, read `PUBLIC_KEY=` on the serial terminal and
+  run `node extras/hyperdht-client.cjs PUBLIC_KEY`. Send `q` over serial to
+  withdraw the announcement and stop listening.
+
+## Client API
 
 Use `#include <HyperDHTClient.h>`. Join Wi-Fi before calling
 `HyperDHTClient::begin(key)` with the 32 raw bytes of the remote public key.
@@ -50,6 +57,31 @@ tries direct, eligible LAN, and bounded hole-punch paths.
 - `close()` aborts the session and releases its socket while keeping Wi-Fi
   connected. If a truncated modem reply leaves the UART out of sync, reset
   the board before starting a new session.
+
+## Server API
+
+Include `HyperDHTServer.h` and join Wi-Fi before calling
+`HyperDHTServer::begin()`. The server exposes `publicKey()` for its 32-byte
+key. Supply a private 32-byte seed to `begin(seed)` to reuse an identity.
+The sketch owns Wi-Fi and seed storage. The source repository's standalone
+sketch under `examples/uno-r4-listener` includes persistent settings and
+the LED demo.
+
+- Call `poll()` frequently to advance discovery, announcements, their refresh
+  and stream I/O. The adapter does no busy waiting. Underlying DNS and Wi-Fi
+  modem commands can block per call.
+- `read(size)` returns a view valid until the next `poll()`, `release()`
+  or `stop()`. Use `write(data, size)` for one 1–1024 byte record. A false
+  return can mean the last record is still pending. Keep the input record
+  and acquire the view again after polling.
+- On `RemoteEnd`, finish pending reads, call `end()` to queue your EOF and
+  keep polling. After closure the server returns to `Listening`.
+- `stop()` releases the peer session and starts withdrawal. Keep polling
+  until `Idle` or `Failed`. A partial modem reply requires a board reset.
+
+The listener uses public-key discovery, the eligible LAN path and bounded
+direct hole punching. Keep client and server in separate firmware builds.
+This package has no combined-role memory budget.
 
 ## Build the ZIP from source
 

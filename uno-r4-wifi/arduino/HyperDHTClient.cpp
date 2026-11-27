@@ -28,7 +28,7 @@ union Phase {
 };
 
 Phase phase;
-WiFiUDP udp;
+WiFiUDP &udp() { static WiFiUDP socket; return socket; }
 uint8_t packet[DatagramMax];
 uint8_t target[32];
 hdt_addr seeds[sizeof(Bootstrap) / sizeof(*Bootstrap)];
@@ -55,7 +55,7 @@ bool publicAddress(const hdt_addr &addr) {
 }
 
 Status finish(Status result) {
-    if (bound && !modemFault) udp.stop();
+    if (bound && !modemFault) udp().stop();
     bound = looking = borrowed = false;
     sodium_memzero(&phase, sizeof(phase));
     sodium_memzero(packet, sizeof(packet));
@@ -103,7 +103,7 @@ bool HyperDHTClient::begin(const uint8_t publicKey[32]) {
     }
     if (!seedCount) return false;
     hdt_ra4m1_install_entropy();
-    if (sodium_init() < 0 || !udp.begin(ClientPort)) return false;
+    if (sodium_init() < 0 || !udp().begin(ClientPort)) return false;
     bound = true;
     memcpy(target, publicKey, sizeof(target));
     auto *discovery = new (&phase.discovery) hdt_discovery;
@@ -126,16 +126,16 @@ HyperDHTClient::Status HyperDHTClient::poll() {
     lastTick = tick;
     if (state == Status::Connecting && elapsed >= 35000) return finish(Status::Failed);
 
-    int incoming = udp.parsePacket();
+    int incoming = udp().parsePacket();
     hdt_addr source{};
     if (incoming < 0 || static_cast<size_t>(incoming) > DatagramMax) {
         modemFault = true;
         return finish(Status::Failed);
     }
     if (incoming) {
-        const IPAddress ip = udp.remoteIP();
-        source = address(ip, udp.remotePort());
-        if (!udp.readPacketInto(packet, static_cast<size_t>(incoming))) {
+        const IPAddress ip = udp().remoteIP();
+        source = address(ip, udp().remotePort());
+        if (!udp().readPacketInto(packet, static_cast<size_t>(incoming))) {
             // A partial binary reply may leave the modem UART out of sync.
             modemFault = true;
             return finish(Status::Failed);
@@ -177,8 +177,8 @@ HyperDHTClient::Status HyperDHTClient::poll() {
             (looking || !hdt_connector_lan_destination(&phase.connector, &destination))) {
             return looking ? state : finish(Status::Failed);
         }
-        if (outgoing > DatagramMax || !udp.beginPacket(IPAddress(destination.ip), destination.port) ||
-            udp.write(packet, outgoing) != outgoing || !udp.endPacket()) return finish(Status::Failed);
+        if (outgoing > DatagramMax || !udp().beginPacket(IPAddress(destination.ip), destination.port) ||
+            udp().write(packet, outgoing) != outgoing || !udp().endPacket()) return finish(Status::Failed);
     }
     return state;
 }

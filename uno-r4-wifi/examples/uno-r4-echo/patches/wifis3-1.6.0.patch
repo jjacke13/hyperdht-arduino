@@ -1,0 +1,55 @@
+--- a/src/Modem.h
++++ b/src/Modem.h
+@@ -114,0 +115,2 @@
++  bool readUdpInto(int socket, uint8_t *buffer, size_t size);
++
+--- a/src/Modem.cpp
++++ b/src/Modem.cpp
+@@ -138,0 +139,33 @@
++bool ModemClass::readUdpInto(int socket, uint8_t *buffer, size_t size) {
++   // Stock UNO R4 WiFi bridge 0.6.0 uses 1460-byte UDP buffers.
++   if (!beginned || socket < 0 || !buffer || size == 0 || size > 1460) return false;
++   const unsigned length = static_cast<unsigned>(size);
++   auto *command = reinterpret_cast<char *>(tx_buff);
++   const int sent = snprintf(command, sizeof(tx_buff), CMD_WRITE(_UDPREAD) "%d,%u\r\n",
++                             socket, length);
++   if (sent <= 0 || static_cast<size_t>(sent) >= sizeof(tx_buff) ||
++       _serial->write(tx_buff, static_cast<size_t>(sent)) != static_cast<size_t>(sent)) return false;
++
++   snprintf(command, sizeof(tx_buff), PROMPT(_UDPREAD) " %u|", length);
++   const unsigned long start = millis();
++   const auto next = [&]() -> int {
++      while (millis() - start <= _timeout) {
++         if (_serial->available()) return _serial->read();
++      }
++      return -1;
++   };
++   for (const char *c = command; *c; ++c) {
++      if (next() != *c) return false;
++   }
++   for (size_t i = 0; i < size; ++i) {
++      const int byte = next();
++      if (byte < 0) return false;
++      buffer[i] = static_cast<uint8_t>(byte);
++   }
++   for (const char *c = TERM_TOKEN RESULT_OK; *c; ++c) {
++      if (next() != *c) return false;
++   }
++   return true;
++}
++
++/* -------------------------------------------------------------------------- */
+--- a/src/WiFiUdp.h
++++ b/src/WiFiUdp.h
+@@ -191,0 +192,3 @@
++  // Bench only. Call after parsePacket() with the exact positive datagram length.
++  bool readPacketInto(uint8_t *buffer, size_t size);
++
+--- a/src/WiFiUdp.cpp
++++ b/src/WiFiUdp.cpp
+@@ -170,0 +171,5 @@
++bool WiFiUDP::readPacketInto(uint8_t *buffer, size_t size) {
++   return rx_buffer.available() == 0 && modem.readUdpInto(_sock, buffer, size);
++}
++
++/* -------------------------------------------------------------------------- */

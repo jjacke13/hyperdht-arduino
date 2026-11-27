@@ -1,4 +1,26 @@
-# HyperDHT for ESP32-S3 — Arduino framework
+# HyperDHT for Arduino
+
+This repository contains two board targets with their own build instructions
+and examples.
+
+| Board | Implementation | Start here |
+|---|---|---|
+| ESP32-S3 (N4R2 and N16R8 tested) | HyperDHT and Holesail on Arduino-ESP32 | [ESP32-S3 instructions below](#esp32-s3), [Arduino library ZIP](ARDUINO-CLI.md) |
+| Arduino Uno R4 WiFi | HyperDHT Tiny on the Renesas RA4M1, using the stock ESP32-S3 Wi-Fi bridge | [Uno R4 WiFi listener](uno-r4-wifi/examples/uno-r4-listener/README.md), [outbound client ZIP](uno-r4-wifi/ARDUINO-CLI.md) |
+
+For the R4, run the documented build commands from `uno-r4-wifi/`. The
+listener sketch and the outbound client ZIP are separate entry points. The R4
+listener supports one active session and up to 1 KiB of plaintext per record.
+Hardware tests verified an authenticated echo with the stock HyperDHT client
+over both a remote connection and the LAN, and confirmed the listener kept
+its public key across a power cycle. The ESP32-S3 ZIP below provides the
+Holesail web server API.
+
+The [Tiny source](uno-r4-wifi/) was imported from HyperDHT Tiny revision
+`fbe4ef1c360aa3c8d039863326131eabf6d9ebda`. It retains its own
+[license](uno-r4-wifi/LICENSE) and [provenance](uno-r4-wifi/PROVENANCE.md).
+
+## ESP32-S3
 
 **Hardware target: Espressif ESP32-S3.** Arduino refers to the programming
 framework and IDE used to write and upload the application. This package does
@@ -199,7 +221,7 @@ measurement or a performance comparison with Ghost Node.
 
 ## License
 
-AGPL-3.0-or-later; see LICENSE. The wrapper adapts Ghost Node's public server
-and HTTP parser. HyperDHT, Holesail and all third-party dependencies retain
-their original licenses/notices; those source trees are not copied into this
-repository. The library is not registered with Arduino Library Manager.
+The ESP32-S3 wrapper is [AGPL-3.0-or-later](LICENSE). It adapts Ghost Node's
+public server and HTTP parser. Its HyperDHT and Holesail dependencies retain
+their original licenses. The Uno R4 WiFi sources carry their own
+[license](uno-r4-wifi/LICENSE) and [third-party notices](uno-r4-wifi/PROVENANCE.md).

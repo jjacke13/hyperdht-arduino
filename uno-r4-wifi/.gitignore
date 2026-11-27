@@ -1,0 +1,6 @@
+/build*/
+/.local/
+/.env
+/.env.*
+/*.log
+__pycache__/

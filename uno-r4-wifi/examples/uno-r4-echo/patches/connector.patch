@@ -1,0 +1,673 @@
+--- a/src/connector.c
++++ b/src/connector.c
+@@ -9,17 +9,26 @@
+     if (c) sodium_memzero(c, sizeof(*c));
+ }
+ static int fail(hdt_connector *c) { hdt_connector_clear(c); return 0; }
+-int hdt_connector_begin(hdt_connector *c, const hdt_addr *rendezvous,
++static int begin(hdt_connector *c, const hdt_addr *rendezvous,
+                          const uint8_t selected[32], const uint8_t seed[32],
+-                         const uint8_t ephemeral[32], uint32_t id, uint16_t tid) {
++                         const uint8_t ephemeral[32], uint32_t id, uint16_t tid,
++                         const hdt_addr *observers, size_t count,
++                         const hdt_addr *local, const uint8_t mask[4]) {
+     uint8_t plain[32], noise[HDT_NOISE_MESSAGE_MAX], value[624], target[32];
+     size_t plain_size, noise_size, value_size;
+     hdt_rpc request = {0};
+     if (!c || !rendezvous || !rendezvous->port || !selected || !seed || !ephemeral) return 0;
+     hdt_connector_clear(c);
++    if (count > HDT_PUNCH_OBSERVERS || (count && !observers)) return 0;
++    if (count) memcpy(c->state.handshake.observers, observers, count * sizeof(*observers));
++    c->state.handshake.observer_count = count;
++    if (local && mask && hdt_lan_private(local) && mask[0] == 255u) {
++        c->state.handshake.local = *local;
++        memcpy(c->state.handshake.mask, mask, 4);
++    } else local = NULL;
+     c->rendezvous = *rendezvous; c->local_id = id; c->tid = tid;
+     if (!hdt_noise_init(&c->state.handshake.noise, 1, seed, ephemeral, selected)) return fail(c);
+-    plain_size = hdt_handshake_payload(id, 0, plain, sizeof(plain));
++    plain_size = hdt_handshake_payload_profile(id, 0, count ? 0 : 1, local, plain, sizeof(plain));
+     if (!plain_size || !hdt_noise_send(&c->state.handshake.noise, plain, plain_size,
+                                        noise, sizeof(noise), &noise_size)) return fail(c);
+     hdt_slice slice = {noise, noise_size};
+@@ -34,6 +43,53 @@
+     c->status = HDT_CONNECT_HANDSHAKE;
+     return 1;
+ }
++int hdt_connector_begin(hdt_connector *c, const hdt_addr *rendezvous,
++                         const uint8_t selected[32], const uint8_t seed[32],
++                         const uint8_t ephemeral[32], uint32_t id, uint16_t tid) {
++    return begin(c, rendezvous, selected, seed, ephemeral, id, tid, NULL, 0, NULL, NULL);
++}
++
++int hdt_connector_begin_nat(hdt_connector *c, const hdt_addr *rendezvous,
++                             const uint8_t selected[32], const uint8_t seed[32],
++                             const uint8_t ephemeral[32], uint32_t id, uint16_t tid,
++                             const hdt_addr *observers, size_t count,
++                         const hdt_addr *local, const uint8_t mask[4]) {
++    return count && begin(c, rendezvous, selected, seed, ephemeral, id, tid, observers, count, local, mask);
++}
++
++static int start_stream(hdt_connector *c, const hdt_addr *peer, uint32_t id,
++                         uint32_t seq, const uint8_t keys[128]) {
++    uint8_t header[59];
++    sodium_memzero(&c->state, sizeof(c->state));
++    hdt_transport_init(&c->state.stream.transport, peer, c->local_id, id, 0, seq);
++    if (!hdt_record_init(&c->state.stream.record, keys, keys + 32, keys + 64, 1, header) ||
++        !hdt_transport_write(&c->state.stream.transport, header, sizeof(header))) return fail(c);
++    c->status = HDT_CONNECT_HEADER;
++    return 1;
++}
++
++/* Match only authenticated RFC1918 addresses on the configured interface subnet. */
++static const hdt_addr *local_peer(const hdt_connector *c, const hdt_peer_info *info,
++                                  const hdt_addr *client, const hdt_addr *server) {
++    if (!c->state.handshake.local.port || !client->port ||
++        hdt_addr_equal(server, &c->rendezvous) || memcmp(client->ip, server->ip, 4)) return NULL;
++    for (size_t i = 0; i < info->lan_count; ++i) {
++        const hdt_addr *peer = &info->lan[i];
++        size_t j = 0;
++        while (j < 4 && !((peer->ip[j] ^ c->state.handshake.local.ip[j]) &
++                          c->state.handshake.mask[j])) ++j;
++        if (j == 4) return peer;
++    }
++    return NULL;
++}
++
++int hdt_connector_lan_destination(const hdt_connector *c, const hdt_addr *to) {
++    if (!c || !c->lan_selected) return 0;
++    const hdt_addr *peer = c->status == HDT_CONNECT_LAN ?
++                            &c->state.punch.peer : &c->state.stream.transport.peer;
++    return hdt_addr_equal(peer, to);
++}
++
+ static void drain(hdt_connector *c) {
+     hdt_transport *t = &c->state.stream.transport;
+     hdt_record *r = &c->state.stream.record;
+@@ -65,6 +121,28 @@
+         *destination = c->rendezvous; c->last_send = now; ++c->attempts;
+         return c->state.handshake.size;
+     }
++    if (c->status == HDT_CONNECT_LAN) {
++        if (c->attempts && now - c->last_send < 700) return 0;
++        if (c->attempts == 2) { fail(c); return 0; }
++        hdt_rpc ping = {0};
++        ping.type = HDT_RPC_REQUEST;
++        ping.flags = HDT_INTERNAL;
++        ping.tid = c->tid;
++        ping.observed = c->state.punch.peer;
++        size_t size = hdt_rpc_encode(&ping, packet, capacity);
++        if (size) {
++            *destination = ping.observed;
++            c->last_send = now;
++            ++c->attempts;
++        }
++        return size;
++    }
++    if (c->status == HDT_CONNECT_PUNCH) {
++        int failed;
++        size_t n = hdt_punch_poll(&c->state.punch, now, destination, packet, capacity, &failed);
++        if (failed) { fail(c); return 0; }
++        return n;
++    }
+     hdt_transport *t = &c->state.stream.transport;
+     *destination = t->peer;
+     size_t size = hdt_transport_poll(t, now, packet, capacity);
+@@ -80,7 +158,7 @@
+         hdt_addr peer;
+         hdt_peer_info info;
+         int has_peer;
+-        uint8_t plain[HDT_NOISE_PAYLOAD_MAX], keys[128], header[59];
++        uint8_t plain[HDT_NOISE_PAYLOAD_MAX], keys[128];
+         size_t written;
+         if (!hdt_addr_equal(source, &c->rendezvous) || !hdt_rpc_decode(packet, size, &response) ||
+             response.type != HDT_RPC_RESPONSE || response.tid != c->tid || response.error ||
+@@ -88,18 +166,58 @@
+             !hdt_handshake_unwrap(response.value, 4, &noise, &peer, &has_peer)) return 0;
+         if (!hdt_noise_receive(&c->state.handshake.noise, noise.data, noise.size, plain,
+                                 sizeof(plain), &written)) return fail(c);
+-        if (!hdt_handshake_peer(plain, written, &info) || info.firewall != 1) return fail(c);
++        if (!hdt_handshake_peer(plain, written, &info)) return fail(c);
+         memcpy(keys, c->state.handshake.noise.tx, 32);
+         memcpy(keys + 32, c->state.handshake.noise.rx, 32);
+         memcpy(keys + 64, c->state.handshake.noise.hash, 64);
+-        sodium_memzero(&c->state, sizeof(c->state));
+-        hdt_transport_init(&c->state.stream.transport, has_peer ? &peer : source,
+-                             c->local_id, info.udx_id, 0, info.udx_seq);
+-        int ok = hdt_record_init(&c->state.stream.record, keys, keys + 32, keys + 64, 1, header);
++        int ok;
++        const hdt_addr *lan = has_peer && info.firewall != 1 ?
++                local_peer(c, &info, &response.observed, &peer) : NULL;
++        if (lan) {
++            sodium_memzero(&c->state, sizeof(c->state));
++            c->state.punch.peer = *lan;
++            c->state.punch.remote_id = info.udx_id;
++            c->state.punch.remote_seq = info.udx_seq;
++            memcpy(c->state.punch.keys, keys, sizeof(keys));
++            ++c->tid;
++            c->attempts = 0;
++            c->lan_selected = 1;
++            c->status = HDT_CONNECT_LAN;
++            ok = 1;
++        } else if (info.firewall == 1) {
++            ok = start_stream(c, has_peer ? &peer : source, info.udx_id, info.udx_seq, keys);
++        } else {
++            hdt_addr observers[HDT_PUNCH_OBSERVERS];
++            uint8_t key[32];
++            size_t count = c->state.handshake.observer_count;
++            memcpy(observers, c->state.handshake.observers, sizeof(observers));
++            memcpy(key, c->state.handshake.noise.remote, sizeof(key));
++            sodium_memzero(&c->state, sizeof(c->state));
++            ok = count && info.firewall < 3 &&
++                 hdt_punch_begin(&c->state.punch, &info, &c->rendezvous, &response.observed,
++                                 observers, count, key, keys, c->tid);
++            if (ok) c->status = HDT_CONNECT_PUNCH;
++        }
++        sodium_memzero(keys, sizeof(keys));
++        return ok ? 1 : fail(c);
++    }
++    if (c->status == HDT_CONNECT_PUNCH || c->status == HDT_CONNECT_LAN) {
++        hdt_punch *p = &c->state.punch;
++        int rc;
++        if (c->status == HDT_CONNECT_LAN) {
++            hdt_rpc pong;
++            rc = c->attempts && hdt_addr_equal(source, &p->peer) &&
++                 hdt_rpc_decode(packet, size, &pong) && pong.type == HDT_RPC_RESPONSE &&
++                 pong.tid == c->tid && !pong.error;
++        } else rc = hdt_punch_receive(p, source, packet, size);
++        if (rc < 0) return fail(c);
++        if (!rc) return 0;
++        uint8_t keys[128];
++        hdt_addr peer = p->peer;
++        memcpy(keys, p->keys, sizeof(keys));
++        int ok = start_stream(c, &peer, p->remote_id, p->remote_seq, keys);
+         sodium_memzero(keys, sizeof(keys));
+-        if (!ok || !hdt_transport_write(&c->state.stream.transport, header, sizeof(header))) return fail(c);
+-        c->status = HDT_CONNECT_HEADER;
+-        return 1;
++        return ok;
+     }
+     if (!hdt_transport_receive(&c->state.stream.transport, source, packet, size)) return 0;
+     if (c->state.stream.transport.closed) return fail(c);
+@@ -121,7 +239,8 @@
+     return c->state.stream.record.plain;
+ }
+ void hdt_connector_release(hdt_connector *c) {
+-    if (!c || c->status < HDT_CONNECT_HEADER) return;
++    if (!c || c->status < HDT_CONNECT_HEADER || c->status == HDT_CONNECT_PUNCH ||
++        c->status == HDT_CONNECT_LAN) return;
+     hdt_record_release(&c->state.stream.record); drain(c);
+ }
+ int hdt_connector_end(hdt_connector *c) {
+--- a/include/hdtiny/connector.h
++++ b/include/hdtiny/connector.h
+@@ -4,21 +4,31 @@
+ #include "noise.h"
+ #include "record.h"
+ #include "transport.h"
++#include "punch.h"
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+ typedef enum { HDT_CONNECT_FAILED, HDT_CONNECT_HANDSHAKE, HDT_CONNECT_HEADER,
+-               HDT_CONNECT_READY, HDT_CONNECT_EOF } hdt_connect_status;
++               HDT_CONNECT_READY, HDT_CONNECT_EOF, HDT_CONNECT_PUNCH, HDT_CONNECT_LAN } hdt_connect_status;
+ typedef struct {
+     union {
+-        struct { hdt_noise noise; uint8_t request[736]; size_t size; } handshake;
++        struct {
++            hdt_noise noise;
++            uint8_t request[736];
++            size_t size;
++            hdt_addr observers[HDT_PUNCH_OBSERVERS];
++            size_t observer_count;
++            hdt_addr local;
++            uint8_t mask[4];
++        } handshake;
++        hdt_punch punch;
+         struct { hdt_transport transport; hdt_record record; } stream;
+     } state;
+     hdt_addr rendezvous;
+     uint64_t last_send;
+     uint32_t local_id;
+     uint16_t tid, consumed;
+-    uint8_t attempts;
++    uint8_t attempts, lan_selected;
+     hdt_connect_status status;
+ } hdt_connector;
+ /* Direct, reachable IPv4 profile on one caller-owned UDP socket. Supply a
+@@ -31,6 +41,14 @@
+ int hdt_connector_begin(hdt_connector *c, const hdt_addr *rendezvous,
+                          const uint8_t selected_key[32], const uint8_t seed[32],
+                          const uint8_t ephemeral_seed[32], uint32_t id, uint16_t tid);
++/* Opt-in bounded hole punching. Use the same UDP socket for observers,
++ * rendezvous and peer. Observer endpoints must be independently configured. */
++int hdt_connector_begin_nat(hdt_connector *c, const hdt_addr *rendezvous,
++                             const uint8_t selected_key[32], const uint8_t seed[32],
++                             const uint8_t ephemeral_seed[32], uint32_t id, uint16_t tid,
++                             const hdt_addr *observers, size_t count,
++                             const hdt_addr *local, const uint8_t mask[4]);
++int hdt_connector_lan_destination(const hdt_connector *c, const hdt_addr *to);
+ size_t hdt_connector_poll(hdt_connector *c, uint64_t now_ms, hdt_addr *destination,
+                            uint8_t *packet, size_t capacity);
+ int hdt_connector_receive(hdt_connector *c, const hdt_addr *source,
+--- a/src/discovery.c
++++ b/src/discovery.c
+@@ -10,8 +10,26 @@
+         if (hdt_addr_equal(&a, &d->visited[i])) return;
+     for (size_t i = 0; i < d->candidates_count; ++i)
+         if (hdt_addr_equal(&a, &d->candidates[i])) return;
+-    if (d->candidates_count == HDT_FIND_CANDIDATES) { d->limited = 1; return; }
+-    d->candidates[d->candidates_count++] = a;
++    /* dht-rpc derives the ID from the six-byte wire address. */
++    uint8_t endpoint[6] = {a.ip[0], a.ip[1], a.ip[2], a.ip[3],
++                           (uint8_t)a.port, (uint8_t)(a.port >> 8)};
++    uint8_t distance[32];
++    if (crypto_generichash(distance, sizeof(distance), endpoint, sizeof(endpoint), NULL, 0)) return;
++    for (size_t i = 0; i < sizeof(distance); ++i) distance[i] ^= d->target[i];
++
++    size_t i = 0;
++    while (i < d->candidates_count && memcmp(d->distance[i], distance, sizeof(distance)) <= 0) ++i;
++    if (d->candidates_count == HDT_FIND_CANDIDATES) {
++        d->limited = 1;
++        if (i == d->candidates_count) return;
++        --d->candidates_count;
++    }
++    size_t shift = d->candidates_count - i;
++    memmove(d->candidates + i + 1, d->candidates + i, shift * sizeof(a));
++    memmove(d->distance + i + 1, d->distance + i, shift * sizeof(distance));
++    d->candidates[i] = a;
++    memcpy(d->distance[i], distance, sizeof(distance));
++    ++d->candidates_count;
+ }
+ int hdt_find_begin(hdt_discovery *d, const uint8_t public_key[32],
+                    const hdt_addr *seeds, size_t count,
+@@ -42,6 +60,7 @@
+         }
+         hdt_addr a = d->candidates[0];
+         memmove(d->candidates, d->candidates + 1, (--d->candidates_count) * sizeof(a));
++        memmove(d->distance, d->distance + 1, d->candidates_count * sizeof(d->distance[0]));
+         d->visited[d->visited_count++] = a;
+         d->attempts = 0; d->awaiting = 1;
+         if (++d->tid == 0) ++d->tid;
+@@ -63,17 +82,16 @@
+         !hdt_rpc_decode(packet, size, &response) || response.type != HDT_RPC_RESPONSE ||
+         response.tid != d->tid) return 0;
+     /* Wire 'observed' describes us; the UDP source identifies the rendezvous. */
+-    if (!(response.flags & HDT_HAS_ERROR) || !response.error) {
+-        if ((response.flags & HDT_HAS_VALUE) &&
+-            hdt_peer_record(response.value, d->public_key, d->relays,
+-                              HDT_FIND_RELAYS, &d->relay_count)) {
+-            d->rendezvous = *source; d->awaiting = 0; d->status = HDT_FIND_FOUND;
+-            return 1;
+-        }
+-        for (size_t i = 0; i < response.closer.size / 6; ++i) {
+-            hdt_addr a;
+-            if (hdt_rpc_closer(&response, i, &a)) candidate(d, a);
+-        }
++    if (!response.error && (response.flags & HDT_HAS_VALUE) &&
++        hdt_peer_record(response.value, d->public_key, d->relays,
++                        HDT_FIND_RELAYS, &d->relay_count)) {
++        d->rendezvous = *source; d->awaiting = 0; d->status = HDT_FIND_FOUND;
++        return 1;
++    }
++    /* dht-rpc bootstrap nodes can return closer nodes with UNKNOWN_COMMAND. */
++    for (size_t i = 0; i < response.closer.size / 6; ++i) {
++        hdt_addr a;
++        if (hdt_rpc_closer(&response, i, &a)) candidate(d, a);
+     }
+     d->awaiting = 0;
+     return 1;
+--- a/include/hdtiny/discovery.h
++++ b/include/hdtiny/discovery.h
+@@ -1,7 +1,7 @@
+ /* SPDX-License-Identifier: LGPL-3.0-only */
+ #ifndef HDTINY_DISCOVERY_H
+ #define HDTINY_DISCOVERY_H
+-#include "rpc.h"
++#include "hdtiny/rpc.h"
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
+@@ -19,6 +19,7 @@
+     uint16_t tid;
+     uint8_t attempts, awaiting, limited;
+     hdt_find_status status;
++    uint8_t distance[HDT_FIND_CANDIDATES][32];
+ } hdt_discovery;
+ /* Fresh workspace. Seeds are caller supplied, no DNS or network side effects.
+  * initial_tid should come from the platform RNG. No identity allowlist. */
+--- a/src/handshake.c
++++ b/src/handshake.c
+@@ -4,10 +4,16 @@
+ #include "compact_internal.h"
+
+ size_t hdt_handshake_payload(uint32_t id, uint32_t seq, uint8_t *out, size_t capacity) {
++    return hdt_handshake_payload_profile(id, seq, 1, NULL, out, capacity);
++}
++
++size_t hdt_handshake_payload_profile(uint32_t id, uint32_t seq, unsigned firewall, const hdt_addr *local,
++                                     uint8_t *out, size_t capacity) {
+     writer w = {out, capacity, 1};
+     if (!out) return 0;
+-    write_uint(&w, 1); write_uint(&w, 24); /* UDX + SecretStream flags */
+-    write_uint(&w, 0); write_uint(&w, 1); /* no error; directly reachable */
++    write_uint(&w, 1); write_uint(&w, 24u | (local ? 2u : 0u));
++    write_uint(&w, 0); write_uint(&w, firewall); /* no error; selected reachability profile */
++    if (local) { write_uint(&w, 1); write_addr(&w, *local); }
+     write_uint(&w, 1); write_uint(&w, 1); /* UDX v1, reusable socket */
+     write_uint(&w, id); write_uint(&w, seq); write_uint(&w, 1);
+     return w.ok ? capacity - w.left : 0;
+@@ -18,6 +24,11 @@
+     take(r, (size_t)count * width);
+     return r->ok;
+ }
++int hdt_lan_private(const hdt_addr *addr) {
++    return addr->port && (addr->ip[0] == 10 ||
++           (addr->ip[0] == 172 && addr->ip[1] >= 16 && addr->ip[1] < 32) ||
++           (addr->ip[0] == 192 && addr->ip[1] == 168));
++}
+ int hdt_handshake_peer(const uint8_t *payload, size_t size, hdt_peer_info *out) {
+     reader r = {payload, size, 1};
+     uint64_t flags, firewall, id, seq;
+@@ -29,9 +40,24 @@
+     firewall = read_uint(&r);
+     if (firewall > 3) return 0;
+     if (flags & 1) {
+-        if (read_uint(&r) > UINT32_MAX || !addresses(&r, 12)) return 0;
++        uint64_t punch_id = read_uint(&r), count = read_uint(&r);
++        if (!r.ok || punch_id > UINT32_MAX || count > r.left / 12) return 0;
++        out->punch_id = (uint32_t)punch_id;
++        for (size_t i = 0; i < count; ++i) {
++            hdt_addr relay = read_addr(&r), peer = read_addr(&r);
++            if (relay.port && peer.port && out->relay_count < HDT_PUNCH_RELAYS)
++                out->relays[out->relay_count++] = (hdt_punch_route){relay, peer};
++        }
++    }
++    if (flags & 2) {
++        uint64_t count = read_uint(&r);
++        if (!r.ok || count > r.left / 6) return 0;
++        for (size_t i = 0; i < count; ++i) {
++            hdt_addr address = read_addr(&r);
++            if (hdt_lan_private(&address) && out->lan_count < HDT_LAN_ADDRESSES)
++                out->lan[out->lan_count++] = address;
++        }
+     }
+-    if ((flags & 2) && !addresses(&r, 6)) return 0;
+     if ((flags & 4) && !addresses(&r, 18)) return 0;
+     if (read_uint(&r) != 1 || read_uint(&r) > 1) return 0;
+     id = read_uint(&r); seq = read_uint(&r);
+--- a/include/hdtiny/handshake.h
++++ b/include/hdtiny/handshake.h
+@@ -5,13 +5,22 @@
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
++enum { HDT_PUNCH_RELAYS = 4, HDT_LAN_ADDRESSES = 8 };
++typedef struct { hdt_addr relay, peer; } hdt_punch_route;
+ typedef struct {
+-    uint32_t firewall, udx_id, udx_seq;
++    uint32_t firewall, udx_id, udx_seq, punch_id;
++    hdt_punch_route relays[HDT_PUNCH_RELAYS];
++    size_t relay_count;
++    hdt_addr lan[HDT_LAN_ADDRESSES];
++    size_t lan_count;
+ } hdt_peer_info;
+ /* Direct reachable profile: version1, OPEN firewall, reusable UDX socket,
+  * SecretStream v1. Optional peer fields are validated/skipped without storage.
+  * A decoded non-OPEN peer is returned for caller to reject as unsupported. */
+ size_t hdt_handshake_payload(uint32_t id, uint32_t seq, uint8_t *out, size_t capacity);
++size_t hdt_handshake_payload_profile(uint32_t id, uint32_t seq, unsigned firewall, const hdt_addr *local,
++                                     uint8_t *out, size_t capacity);
++int hdt_lan_private(const hdt_addr *addr);
+ int hdt_handshake_peer(const uint8_t *payload, size_t size, hdt_peer_info *out);
+ /* Outer PEER_HANDSHAKE RPC value. Views borrow the input packet. */
+ size_t hdt_handshake_wrap(unsigned mode, hdt_slice noise, uint8_t *out, size_t capacity);
+--- /dev/null
++++ b/src/punch.c
+@@ -0,0 +1,207 @@
++/* SPDX-License-Identifier: LGPL-3.0-only
++ * Fixed-memory adaptation of hyperdht-cpp/src/holepunch.cpp. Uses the
++ * supplied UDP endpoint throughout, with bounded sampling and probing.
++ */
++#include "hdtiny/punch.h"
++#include "compact_internal.h"
++#include <sodium.h>
++
++enum { SAMPLE, PROBE, COMMIT, DIRECT };
++enum { CONSISTENT = 2 };
++enum { HAS_ADDRESSES = 4, HAS_TOKEN = 16, HAS_REMOTE_TOKEN = 32, PUNCHING = 2 };
++enum { MAX_ADDRESSES = 4, MAX_PLAINTEXT = 128, RETRIES = 3 };
++static const uint8_t ns_punch[32] = {
++    0xf1, 0x19, 0x1c, 0xd5, 0xe6, 0x7b, 0x10, 0xb5, 0x4a, 0x50, 0x70, 0x33, 0x28, 0x0e, 0xd1, 0xff,
++    0x0e, 0x12, 0x27, 0x82, 0x68, 0xd5, 0x67, 0x9c, 0x8f, 0x93, 0xd4, 0x17, 0x21, 0x0d, 0x16, 0x8b
++};
++
++int hdt_punch_begin(hdt_punch *p, const hdt_peer_info *info, const hdt_addr *rendezvous,
++                    const hdt_addr *external, const hdt_addr *observers, size_t observer_count,
++                    const uint8_t key[32], const uint8_t keys[128], uint16_t tid) {
++    if (!info->relay_count || !external->port) return 0;
++    size_t chosen = 0;
++    while (chosen + 1 < info->relay_count &&
++           !hdt_addr_equal(&info->relays[chosen].relay, rendezvous)) ++chosen;
++    if (!hdt_addr_equal(&info->relays[chosen].relay, rendezvous)) chosen = 0;
++    p->relay = info->relays[chosen].relay;
++    p->peer = info->relays[chosen].peer;
++    p->external = *external;
++    p->observed = 1;
++    p->id = info->punch_id;
++    p->remote_id = info->udx_id;
++    p->remote_seq = info->udx_seq;
++    p->tid = tid + 1u;
++    for (size_t i = 0; i < observer_count && i < HDT_PUNCH_OBSERVERS; ++i) {
++        if (!observers[i].port || hdt_addr_equal(&observers[i], rendezvous)) continue;
++        size_t j = 0;
++        while (j < p->observers_count && !hdt_addr_equal(&observers[i], &p->observers[j])) ++j;
++        if (j == p->observers_count) p->observers[p->observers_count++] = observers[i];
++    }
++    if (p->observers_count < 2) return 0;
++    memcpy(p->keys, keys, sizeof(p->keys));
++    randombytes_buf(p->token, sizeof(p->token));
++    return !crypto_generichash(p->secret, sizeof(p->secret), ns_punch, sizeof(ns_punch), keys + 64, 64) &&
++           !crypto_generichash(p->target, sizeof(p->target), key, 32, NULL, 0);
++}
++
++static size_t control(const hdt_punch *p, uint8_t *packet, size_t cap) {
++    uint8_t plain[MAX_PLAINTEXT], sealed[MAX_PLAINTEXT + 40], value[MAX_PLAINTEXT + 56];
++    unsigned commit = p->phase == COMMIT;
++    writer w = {plain, sizeof(plain), 1};
++    write_uint(&w, HAS_ADDRESSES | (commit ? PUNCHING | HAS_TOKEN | HAS_REMOTE_TOKEN : 0));
++    write_uint(&w, 0);
++    write_uint(&w, CONSISTENT);
++    write_uint(&w, p->round);
++    write_uint(&w, 1);
++    write_addr(&w, p->external);
++    if (commit) {
++        put(&w, p->token, sizeof(p->token));
++        put(&w, p->remote_token, sizeof(p->remote_token));
++    }
++    size_t size = sizeof(plain) - w.left;
++    randombytes_buf(sealed, 24);
++    int ok = w.ok && !crypto_secretbox_easy(sealed + 24, plain, size, sealed, p->secret);
++    sodium_memzero(plain, sizeof(plain));
++    if (!ok) return 0;
++
++    w = (writer){value, sizeof(value), 1};
++    write_uint(&w, 1); /* peerAddress present */
++    write_uint(&w, 0); /* FROM_CLIENT */
++    write_uint(&w, p->id);
++    write_uint(&w, size + 40);
++    put(&w, sealed, size + 40);
++    write_addr(&w, p->peer);
++    if (!w.ok) return 0;
++    hdt_rpc request = {0};
++    request.type = HDT_RPC_REQUEST;
++    request.flags = HDT_HAS_TARGET | HDT_HAS_VALUE;
++    request.tid = p->tid;
++    request.observed = p->relay;
++    request.command = 1;
++    request.target = p->target;
++    request.value = (hdt_slice){value, sizeof(value) - w.left};
++    return hdt_rpc_encode(&request, packet, cap);
++}
++
++static void advance(hdt_punch *p, uint8_t phase) {
++    p->phase = phase;
++    p->attempts = 0;
++    ++p->tid;
++}
++
++size_t hdt_punch_poll(hdt_punch *p, uint64_t now, hdt_addr *to, uint8_t *packet, size_t cap,
++                      int *failed) {
++    *failed = 0;
++    if (!cap) return 0;
++    if (!p->active) { p->started = now; p->active = 1; }
++    if (now - p->started >= 16000) { *failed = 1; return 0; }
++
++    if (p->phase == SAMPLE &&
++        (!p->attempts || now - p->last_send >= 700)) {
++        if (p->attempts == 2) {
++            ++p->next_observer;
++            advance(p, SAMPLE);
++        }
++        if (p->next_observer == p->observers_count) { *failed = 1; return 0; }
++        *to = p->observers[p->next_observer];
++        hdt_rpc ping = {0};
++        ping.type = HDT_RPC_REQUEST;
++        ping.flags = HDT_INTERNAL;
++        ping.tid = p->tid;
++        ping.observed = *to;
++        size_t size = hdt_rpc_encode(&ping, packet, cap);
++        if (size) { p->last_send = now; ++p->attempts; }
++        return size;
++    }
++
++    if ((p->phase == PROBE || p->phase == COMMIT) &&
++        (!p->attempts || now - p->last_send >= 1400)) {
++        if (p->attempts == RETRIES) { *failed = 1; return 0; }
++        *to = p->relay;
++        size_t size = control(p, packet, cap);
++        if (size) { p->last_send = now; ++p->attempts; }
++        return size;
++    }
++
++    if ((p->phase == COMMIT || p->phase == DIRECT) &&
++        (!p->probe_sent || now - p->last_probe >= 400)) {
++        *to = p->peer;
++        packet[0] = 0;
++        p->probe_sent = 1;
++        p->last_probe = now;
++        return 1;
++    }
++    return 0;
++}
++
++static int decision(hdt_punch *p, hdt_slice value) {
++    reader r = {value.data, value.size, 1};
++    uint64_t flags = read_uint(&r);
++    if (flags != 1 || read_uint(&r) != 4 || read_uint(&r) != 0) return 0;
++    hdt_slice sealed = read_buffer(&r);
++    hdt_addr peer = read_addr(&r);
++    uint8_t plain[MAX_PLAINTEXT];
++    if (!r.ok || r.left || !peer.port || sealed.size <= 40 ||
++        sealed.size - 40 > sizeof(plain) ||
++        crypto_secretbox_open_easy(plain, sealed.data + 24, sealed.size - 24, sealed.data, p->secret)) return 0;
++    r = (reader){plain, sealed.size - 40, 1};
++    flags = read_uint(&r);
++    uint64_t error = read_uint(&r), firewall = read_uint(&r), round = read_uint(&r);
++    uint64_t count = flags & HAS_ADDRESSES ? read_uint(&r) : 0;
++    int address_matches = 0;
++    if (count > MAX_ADDRESSES) r.ok = 0;
++    for (size_t i = 0; r.ok && i < count; ++i) {
++        hdt_addr candidate = read_addr(&r);
++        if (hdt_addr_equal(&candidate, &peer)) address_matches = 1;
++    }
++    if (flags & 8u) (void)read_addr(&r);
++    const uint8_t *token = flags & HAS_TOKEN ? take(&r, 32) : NULL;
++    const uint8_t *remote = flags & HAS_REMOTE_TOKEN ? take(&r, 32) : NULL;
++    int result = 0;
++    if (!r.ok || r.left || flags > 63 || round != p->round) goto done;
++    if (error || firewall > CONSISTENT) { result = -1; goto done; }
++
++    if (p->phase == PROBE) {
++        if (!firewall || !token) {
++            if (++p->round >= RETRIES) { result = -1; goto done; }
++            advance(p, PROBE);
++            goto done;
++        }
++        if (!address_matches) { result = -1; goto done; }
++        p->peer = peer;
++        memcpy(p->remote_token, token, 32);
++        ++p->round;
++        advance(p, COMMIT);
++    } else {
++        if (!(flags & PUNCHING) || !address_matches || !hdt_addr_equal(&peer, &p->peer) ||
++            !remote || sodium_memcmp(remote, p->token, 32)) {
++            result = -1;
++            goto done;
++        }
++        advance(p, DIRECT);
++        result = p->peer_seen;
++    }
++done:
++    sodium_memzero(plain, sizeof(plain));
++    return result;
++}
++
++int hdt_punch_receive(hdt_punch *p, const hdt_addr *from, const uint8_t *packet, size_t size) {
++    if (size == 1 && packet[0] == 0 && p->probe_sent &&
++        (p->phase == COMMIT || p->phase == DIRECT) && hdt_addr_equal(from, &p->peer)) {
++        p->peer_seen = 1;
++        return p->phase == DIRECT;
++    }
++    if (!p->attempts || p->phase == DIRECT) return 0;
++    const hdt_addr *expected = p->phase == SAMPLE ? &p->observers[p->next_observer] : &p->relay;
++    hdt_rpc response;
++    if (!hdt_addr_equal(from, expected) || !hdt_rpc_decode(packet, size, &response) ||
++        response.type != HDT_RPC_RESPONSE || response.tid != p->tid || response.error) return 0;
++    if (p->phase == SAMPLE) {
++        if (!hdt_addr_equal(&response.observed, &p->external)) return -1;
++        ++p->next_observer;
++        advance(p, ++p->observed >= 3 ? PROBE : SAMPLE);
++        return 0;
++    }
++    return (response.flags & HDT_HAS_VALUE) ? decision(p, response.value) : 0;
++}
+--- /dev/null
++++ b/include/hdtiny/punch.h
+@@ -0,0 +1,35 @@
++/* SPDX-License-Identifier: LGPL-3.0-only
++ * Bounded adaptation of hyperdht-cpp/src/holepunch.cpp.
++ * Stock HyperDHT initiator profile for matching external IPv4 mappings.
++ */
++#ifndef HDT_PUNCH_H
++#define HDT_PUNCH_H
++#include "handshake.h"
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++enum { HDT_PUNCH_OBSERVERS = 3 };
++
++typedef struct {
++    hdt_addr relay, peer, external, observers[HDT_PUNCH_OBSERVERS];
++    uint8_t secret[32], target[32], token[32], remote_token[32], keys[128];
++    uint64_t last_send, last_probe, started;
++    uint32_t id, remote_id, remote_seq;
++    uint16_t tid;
++    uint8_t phase, observed, next_observer, observers_count, attempts, round;
++    uint8_t active, probe_sent, peer_seen;
++} hdt_punch;
++
++int hdt_punch_begin(hdt_punch *p, const hdt_peer_info *info, const hdt_addr *rendezvous,
++                    const hdt_addr *external, const hdt_addr *observers, size_t observer_count,
++                    const uint8_t key[32], const uint8_t keys[128], uint16_t tid);
++size_t hdt_punch_poll(hdt_punch *p, uint64_t now, hdt_addr *to, uint8_t *packet, size_t cap,
++                      int *failed);
++/* 1: an authenticated control round and a direct probe succeeded.
++ * 0: keep polling. -1: a peer-authenticated error or inconsistent mapping. */
++int hdt_punch_receive(hdt_punch *p, const hdt_addr *from, const uint8_t *packet, size_t size);
++#ifdef __cplusplus
++}
++#endif
++#endif
